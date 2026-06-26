@@ -1,0 +1,9 @@
+{
+	"type": "module",
+	"dependencies": {
+		"@qdrant/js-client-rest": "^1.18.0"
+	},
+	"devDependencies": {
+		"tsx": "^4.22.4"
+	}
+}

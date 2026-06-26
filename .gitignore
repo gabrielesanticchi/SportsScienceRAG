@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+pnpm-debug.log*
+
+# Search outputs
+search_outputs/
+out.json
+
+# Source PDF papers (copyrighted — keep local only; extracted text lives in assets/sports_science_documents.py)
+assets/*.pdf
+
+# OS
+.DS_Store
