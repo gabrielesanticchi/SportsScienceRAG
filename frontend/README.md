@@ -37,21 +37,153 @@ cp .env.example .env.local
 
 Point `NEXT_PUBLIC_API_URL` at your real backend (e.g. `http://localhost:8000/api/v1`) when integrating.
 
-## Architecture
+## Component Inventory
+
+### Workspace Layout
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| **SplitPaneLayout** | `components/workspace/split-pane-layout.tsx` | Three-column layout container: left (SourceManager), center (CitationViewer), right (ChatPanel) |
+| **SourceManager** | `components/workspace/source-manager.tsx` | Left panel: grid of document cards with checkboxes for selecting chat context |
+| **CitationViewer** | `components/workspace/citation-viewer.tsx` | Center panel: react-pdf viewer with SVG bounding-box overlays; syncs with active document and highlighted citation |
+| **ChatPanel** | `components/workspace/chat-panel.tsx` | Right panel: message history, chat input box, loading state; displays citations as clickable chips |
+
+### Upload Flow
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| **DropZone** | `components/upload/drop-zone.tsx` | Drag-drop area for PDF files; validates file type and size (≤50MB) |
+| **UploadProgressList** | `components/upload/upload-progress-list.tsx` | Displays upload queue with progress bars, status badges, and sub-state text |
+
+### Hooks
+
+| Hook | File | Purpose |
+|------|------|---------|
+| **useUploadPipeline** | `hooks/use-upload-pipeline.ts` | Orchestrates: drop → UUID → upload init → presigned URL → file PUT → SSE polling → store sync. Returns `uploadItems`, `dropZoneProps`, `handlers`. |
+| **useChat** | `hooks/use-chat.ts` | Manages chat interaction: sends search query with selected document IDs, parses citations from response, updates store. Returns `sendMessage`, `isLoading`. |
+
+### API & Utilities
+
+| Module | File | Purpose |
+|--------|------|---------|
+| **api-client** | `lib/api-client.ts` | Axios instance with JWT interceptor; exports functions: `initDocumentUpload`, `uploadFileToStorage`, `listDocuments`, `getDocument`, `querySearch` |
+| **auth** | `lib/auth.ts` | JWT token generation (dev only); includes `getAuthToken()`, `generateDevJWT(tenantId)` |
+| **sse** | `lib/sse.ts` | Server-Sent Events helper; exports `streamParsingEvents(workspaceId)` which yields parsing update events |
+| **types** | `lib/types.ts` | TypeScript interfaces: `WorkspaceDocument`, `ChatMessage`, `Citation`, `UploadFileItem`, `SearchQueryPayload`, etc. |
+
+### State Management
+
+| Store | File | Purpose |
+|-------|------|---------|
+| **workspace-store** | `stores/workspace-store.ts` | Zustand store managing: `documents[]`, `uploadQueue[]`, `chatMessages[]`, `activeDocumentId`, `highlightedBoundingBoxId`, selections, UI state |
+
+## Data Flow Diagrams
+
+### Upload Lifecycle
 
 ```
-src/
-├── app/                    # Next.js App Router pages & mock API routes
-├── components/
-│   ├── upload/             # DropZone, UploadProgressList
-│   ├── workspace/          # SplitPaneLayout, CitationViewer, ChatPanel
-│   └── ui/                 # shadcn-style primitives
-├── hooks/                  # useUploadPipeline, useChat
-├── lib/                    # api-client, auth, sse, types
-└── stores/                 # Zustand workspace state
+User drops PDF into DropZone
+    ↓
+useUploadPipeline validates (PDF, ≤50MB)
+    ↓
+Generate local UUID
+    ↓
+Call POST /workspaces/:id/documents/upload
+    ← Response: { upload_token, presigned_url, document_id }
+    ↓
+Store: addUploadItems({ id: UUID, status: 'UPLOADING' })
+    ↓
+PUT file to presigned_url
+    ├─ Track progress via onUploadProgress callback
+    ├─ Store: updateUploadItem(UUID, { status: 'UPLOADING', progress: 0-100 })
+    ↓
+Call GET /workspaces/:id/documents/events (SSE)
+    ├─ Poll EventSource for parsing updates
+    ├─ On event: Store: updateUploadItem(UUID, { status: 'PROCESSING', substatus: '...' })
+    ├─ Repeat until: { status: 'COMPLETED' } or { status: 'FAILED' }
+    ↓
+Store: promoteUploadToDocument(UUID, WorkspaceDocument)
+    ├─ Remove from uploadQueue
+    ├─ Add to documents[]
+    ↓
+SourceManager re-renders, upload item disappears
 ```
 
-## Backend contract
+### Chat & Citation Cycle
+
+```
+User selects documents (checkboxes in SourceManager)
+    ↓
+User types query in ChatPanel input
+    ↓
+User presses Send
+    ↓
+useChat fires:
+    POST /search/query {
+        query: "...",
+        document_ids: [selected UUIDs]
+    }
+    ↓
+Backend returns: { answer: "...", citations: [...] }
+    ↓
+Store: addChatMessage({
+    role: 'assistant',
+    content: answer,
+    citations: [...]
+})
+    ↓
+ChatPanel renders assistant message with Citation chips
+    ↓
+User clicks Citation chip
+    ↓
+Store: navigateToCitation(citation)
+    ├─ setActiveDocument(citation.document_id)
+    ├─ CitationViewer scrolls to page
+    ├─ SVG overlay highlights bounding_boxes
+    ↓
+Visual feedback: user sees source highlighted
+```
+
+## State Shape
+
+The Zustand store tracks:
+
+```typescript
+{
+  // Workspace context
+  workspaceId: string | null
+
+  // Document management
+  documents: WorkspaceDocument[]           // Processed docs (id, filename, status, layout, bounding_boxes)
+  uploadQueue: UploadFileItem[]            // In-flight uploads (id, filename, status, progress, substatus)
+
+  // UI selection & viewing
+  activeDocumentId: string | null          // Which document is open in CitationViewer
+  highlightedBoundingBoxId: string | null  // Which bounding box to highlight (for citation focus)
+  viewerOpen: boolean                      // Document modal open/closed
+
+  // Chat
+  chatMessages: ChatMessage[]              // Conversation (role: 'user'|'assistant', content, citations)
+  isChatLoading: boolean                   // Search query in flight
+
+  // Action creators (mutators)
+  setWorkspaceId(id: string): void
+  setDocuments(docs: WorkspaceDocument[]): void
+  addUploadItems(items: UploadFileItem[]): void
+  updateUploadItem(id: string, patch: Partial<UploadFileItem>): void
+  promoteUploadToDocument(uploadId: string, doc: WorkspaceDocument): void
+  updateDocument(id: string, patch: Partial<WorkspaceDocument>): void
+  setActiveDocument(id: string | null): void
+  toggleDocumentSelection(id: string): void
+  setHighlightedBoundingBox(id: string | null): void
+  setViewerOpen(open: boolean): void
+  addChatMessage(message: ChatMessage): void
+  setChatLoading(loading: boolean): void
+  navigateToCitation(citation: Citation): void
+}
+```
+
+## Backend Contract
 
 All requests require `Authorization: Bearer <JWT>` with `tenant_id` in the payload.
 
@@ -62,3 +194,5 @@ All requests require `Authorization: Bearer <JWT>` with `tenant_id` in the paylo
 | `/workspaces/:id/documents/:docId` | GET | Document layout + bounding boxes |
 | `/workspaces/:id/documents/events` | GET (SSE) | Parsing progress stream |
 | `/search/query` | POST | Chat query with `document_ids` filter |
+
+For detailed request/response schemas, see [`docs/CODEMAPS/frontend.md`](../CODEMAPS/frontend.md#backend-contract).
