@@ -150,7 +150,6 @@ def process_document(self, document_id: str, tenant_id: str) -> dict:
                             "page_number": chunk.page_number,
                             "section": chunk.section,
                             "parser": parsed.parser_used,
-                            "parser_comparison": parsed.comparison or {},
                         },
                     )
                 )
@@ -173,7 +172,6 @@ def process_document(self, document_id: str, tenant_id: str) -> dict:
                 "document_id": document_id,
                 "chunks": len(points),
                 "parser": parsed.parser_used,
-                "parser_comparison": parsed.comparison,
             }
         except MaxRetriesExceededError:
             _set_document_status(

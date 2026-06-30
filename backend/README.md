@@ -10,7 +10,7 @@ POST /v1/ingest/upload (FastAPI + JWT)
   -> Raw PDF -> MinIO
   -> status=PENDING in Postgres
   -> Celery task (RabbitMQ)
-       -> Unstructured PDF parse (default) with Docling/PyMuPDF fallbacks
+       -> Unstructured PDF parse
        -> deterministic chunk IDs
        -> dense + sparse(BM25/IDF) + ColBERT multi embeddings
        -> Qdrant upsert (shared collection, tenant payload index)
@@ -82,26 +82,14 @@ curl -X POST http://localhost:8000/v1/search \
 
 ## PDF parsing
 
-Default parser is [Unstructured](https://github.com/Unstructured-IO/unstructured). Configure via `.env`:
+PDFs are parsed with [Unstructured](https://github.com/Unstructured-IO/unstructured). Configure via `.env`:
 
 | Variable | Values | Default |
 |----------|--------|---------|
-| `PDF_PARSER` | `unstructured`, `docling`, `auto`, `compare` | `unstructured` |
 | `UNSTRUCTURED_STRATEGY` | `fast`, `hi_res`, `ocr_only`, `auto` | `fast` |
 | `UNSTRUCTURED_INFER_TABLES` | `true` / `false` | `false` |
 
-- **`unstructured`**: Unstructured only; falls back to Docling → PyMuPDF on failure.
-- **`docling`**: Docling-first legacy chain.
-- **`auto`**: Unstructured first, then Docling chain.
-- **`compare`**: Runs both parsers, logs timing/char metrics, indexes with the Unstructured result (Docling if Unstructured fails). Comparison metadata is stored on Qdrant payloads as `parser_comparison`.
-
-Local A/B script:
-
-```bash
-docker compose exec worker python scripts/compare_parsers.py /path/to/paper.pdf
-```
-
-Optional table-heavy fallbacks: `LLAMAPARSE_API_KEY`, `REDUCTO_API_KEY`.
+Set `UNSTRUCTURED_INFER_TABLES=true` for table-heavy PDFs (uses `hi_res` strategy).
 
 ## Celery reliability
 

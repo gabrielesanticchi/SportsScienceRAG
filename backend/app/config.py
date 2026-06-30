@@ -34,10 +34,6 @@ class Settings(BaseSettings):
     chunk_size: int = 512
     chunk_overlap: int = 64
 
-    llamaparse_api_key: str = ""
-    reducto_api_key: str = ""
-
-    pdf_parser: str = "unstructured"
     unstructured_strategy: str = "fast"
     unstructured_infer_tables: bool = False
 
