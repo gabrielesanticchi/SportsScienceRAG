@@ -1,8 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { getAuthToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import type { BoundingBox, WorkspaceDocument } from "@/lib/types";
 
@@ -116,6 +117,25 @@ export function CitationViewer({
     setNumPages(pages);
   }, []);
 
+  const pdfFile = useMemo(() => {
+    if (!document?.pdfUrl) return null;
+    if (document.pdfUrl.startsWith("blob:")) {
+      return document.pdfUrl;
+    }
+
+    const token = getAuthToken();
+    if (!token) {
+      return document.pdfUrl;
+    }
+
+    return {
+      url: document.pdfUrl,
+      httpHeaders: {
+        Authorization: `Bearer ${token}`,
+      },
+    };
+  }, [document?.pdfUrl]);
+
   if (!document) {
     return (
       <div className="flex h-full items-center justify-center bg-zinc-50">
@@ -126,7 +146,7 @@ export function CitationViewer({
     );
   }
 
-  if (!document.pdfUrl) {
+  if (!pdfFile) {
     return (
       <div className="flex h-full items-center justify-center bg-zinc-50">
         <p className="text-sm text-zinc-500">PDF preview unavailable</p>
@@ -137,7 +157,7 @@ export function CitationViewer({
   return (
     <div ref={containerRef} className="h-full overflow-y-auto bg-zinc-100 p-4">
       <Document
-        file={document.pdfUrl}
+        file={pdfFile}
         onLoadSuccess={onDocumentLoadSuccess}
         loading={
           <div className="flex h-40 items-center justify-center text-sm text-zinc-500">
