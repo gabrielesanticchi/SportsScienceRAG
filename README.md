@@ -1,15 +1,79 @@
 # Sports Science Semantic Search Engine
 
-A semantic search engine over a corpus of 27 sports-science research papers
-(PDFs in `assets/`). It extracts text and metadata from each PDF, chunks the
-text using **three strategies**, embeds the chunks with Sentence Transformers,
-stores them in **Qdrant** (one named vector per strategy), and lets you search
-and compare the strategies side by side.
+This repository contains **two complementary retrieval systems** over a corpus
+of sports-science research papers:
 
-## Architecture
+| Pipeline | Path | What it is |
+|----------|------|-----------|
+| **Core engine** | `sports_science_search/` + `examples/` | A standalone, single-process semantic search engine over the 27 PDFs in `assets/`. Compares three chunking strategies on a single Qdrant collection. The original project. |
+| **Hybrid ingestion backend** | `backend/` + `frontend/` | A production-grade, multi-tenant ingestion + hybrid-retrieval service (FastAPI · Celery · Postgres · Qdrant · MinIO) with a NotebookLM-style Next.js workspace. |
 
-The code lives in the `sports_science_search/` package — one responsibility per
-module:
+The **core engine** extracts text and metadata from each PDF, chunks it using
+**three strategies**, embeds the chunks with Sentence Transformers, stores them
+in **Qdrant** (one named vector per strategy), and lets you search and compare
+the strategies side by side.
+
+## System architecture
+
+```mermaid
+flowchart TB
+    subgraph client["Client"]
+        FE["Next.js 16 / React 19<br/>Document Workspace<br/>upload · chat · citations"]
+    end
+
+    subgraph apilayer["API layer — FastAPI :8000 (JWT + tenant_id)"]
+        UP["POST /v1/ingest/upload"]
+        SR["POST /v1/search<br/>2-stage hybrid"]
+        EV["SSE progress stream"]
+    end
+
+    subgraph asyncp["Async pipeline"]
+        MQ["RabbitMQ :5672<br/>Celery broker"]
+        WK["Celery worker<br/>parse → chunk → embed → upsert"]
+        RD["Redis :6379<br/>result backend"]
+        UNS["Unstructured<br/>PDF parse"]
+        subgraph emb["Embedders"]
+            DEN["Dense · all-MiniLM-L6-v2 (384d)"]
+            SPA["Sparse · Qdrant/bm25 (IDF)"]
+            COL["ColBERT · colbertv2.0 (128d)"]
+        end
+    end
+
+    subgraph stores["Data stores"]
+        PG[("PostgreSQL :5432<br/>doc/chunk metadata<br/>RLS on tenant_id")]
+        S3[("MinIO / S3 :9000<br/>raw PDFs · ingestion-raw")]
+        QD[("Qdrant :6333<br/>hybrid_ingestion<br/>dense · sparse · multi<br/>tenant-scoped HNSW")]
+    end
+
+    FE -->|upload PDF| UP
+    UP -->|SHA-256 dedup + metadata| PG
+    UP -->|store raw PDF| S3
+    UP -->|enqueue task| MQ
+    MQ --> WK
+    WK -->|status / results| RD
+    WK -->|fetch PDF| S3
+    WK --> UNS
+    UNS --> emb
+    WK -->|upsert vectors| QD
+    WK -->|status updates| PG
+    WK -.->|progress events| EV
+    EV -.->|live updates| FE
+
+    FE -->|query + document_ids + JWT| SR
+    SR -->|"Stage 1: parallel sparse + dense prefetch (tenant filter)"| QD
+    SR -->|"Stage 2: ColBERT MAX_SIM rerank"| QD
+    SR -->|ranked results| FE
+```
+
+> The standalone **core engine** is independent of the backend stack — see its
+> dedicated flow under [Core engine](#core-engine-sports_science_search) below.
+> A detailed component/port/env reference lives in
+> [`docs/CODEMAPS/infrastructure.md`](docs/CODEMAPS/infrastructure.md).
+
+## Core engine (`sports_science_search/`)
+
+The standalone engine lives in the `sports_science_search/` package — one
+responsibility per module:
 
 | Module | Responsibility |
 |--------|----------------|
@@ -114,6 +178,55 @@ print(results["analysis"]["top_strategy"])
 - `VectorStore.upload_chunks` encodes chunks one at a time and uses sequential
   integer point IDs — batch encoding and UUID IDs are pending optimizations.
 - `avg_chunk_size` in the analysis output is an approximation.
+
+## Multi-Tenant Hybrid Ingestion Backend (`backend/`)
+
+The `backend/` directory is a production-grade, multi-tenant document ingestion
+and **hybrid retrieval** service, orchestrated entirely with Docker Compose. It
+is independent of the core engine above and is what the frontend talks to.
+
+### Stack
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| **FastAPI** | 8000 | Upload + search REST API, JWT auth carrying `tenant_id` |
+| **PostgreSQL** | 5432 | Document/chunk metadata with Row-Level Security on `tenant_id` |
+| **RabbitMQ** | 5672 / 15672 | Celery broker |
+| **Redis** | 6379 | Celery result backend |
+| **Celery worker** | — | Parse → chunk → embed → Qdrant upsert |
+| **MinIO** (S3-compatible) | 9000 / 9001 | Raw PDF storage (`ingestion-raw` bucket) |
+| **Qdrant** | 6333 / 6334 | Shared hybrid collection `hybrid_ingestion` |
+
+### Hybrid retrieval
+
+Each chunk is embedded three ways and stored as named vectors in one shared,
+tenant-partitioned Qdrant collection:
+
+| Vector | Model | Role |
+|--------|-------|------|
+| `dense` | `sentence-transformers/all-MiniLM-L6-v2` (384d, cosine) | Semantic recall |
+| `sparse` | FastEmbed `Qdrant/bm25` (server-side IDF) | Lexical recall |
+| `multi` | `colbert-ir/colbertv2.0` (128d, MAX_SIM, HNSW `m=0`) | Late-interaction rerank |
+
+Search is two-stage: **(1)** parallel sparse + dense prefetch (top-20 each,
+tenant-filtered), then **(2)** ColBERT `MAX_SIM` rerank over the unified
+candidates (top-10). Global HNSW is disabled (`m=0`) in favour of
+payload-scoped graphs (`payload_m=16`) keyed on a `tenant_id` keyword index
+(`is_tenant=true`). Qdrant point IDs are `sha256(f"{document_id}:{chunk_index}")`,
+so Celery retries overwrite rather than duplicate.
+
+### Quick start
+
+```bash
+cd backend
+cp .env.example .env
+docker compose up --build
+# API http://localhost:8000 · Qdrant :6333 · MinIO console :9001 · RabbitMQ :15672
+docker compose exec api python scripts/generate_dev_token.py   # dev JWT
+```
+
+See [`backend/README.md`](backend/README.md) for the full API contract,
+parsing options, and Celery reliability settings.
 
 ## Document Workspace Frontend
 

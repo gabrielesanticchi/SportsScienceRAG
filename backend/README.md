@@ -107,6 +107,7 @@ Embedder HTTP 429 retries use exponential backoff with jitter:
 
 Each Qdrant point ID is `sha256(f"{document_id}:{chunk_index}")`, so task retries overwrite vectors instead of duplicating them.
 
-## Worktree
+## Branch
 
-This backend lives on branch `enb` in worktree `SportsScienceRAG-enb`.
+This backend was merged into the consolidated `development` branch (it
+previously lived on the now-removed `enb` branch/worktree).
