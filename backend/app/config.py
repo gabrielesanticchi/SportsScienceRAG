@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     llamaparse_api_key: str = ""
     reducto_api_key: str = ""
 
+    pdf_parser: str = "unstructured"
+    unstructured_strategy: str = "fast"
+    unstructured_infer_tables: bool = False
+
     embedder_rate_limit_jitter: float = 1.0
     celery_task_max_retries: int = 5
 
