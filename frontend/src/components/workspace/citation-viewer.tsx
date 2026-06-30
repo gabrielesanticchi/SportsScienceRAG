@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getAuthToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import type { BoundingBox, WorkspaceDocument } from "@/lib/types";
+import type { BoundingBox, Citation, WorkspaceDocument } from "@/lib/types";
 
 const Document = dynamic(
   () => import("react-pdf").then((mod) => mod.Document),
@@ -19,6 +19,11 @@ const Page = dynamic(() => import("react-pdf").then((mod) => mod.Page), {
 interface CitationViewerProps {
   document: WorkspaceDocument | null;
   highlightedBoundingBoxId: string | null;
+  activeCitation?: Citation | null;
+}
+
+function hasLayoutOverlay(box: BoundingBox): boolean {
+  return !box.estimated && box.width > 0 && box.height > 0;
 }
 
 const BOX_COLORS: Record<BoundingBox["type"], string> = {
@@ -77,6 +82,7 @@ function BoundingBoxOverlay({
 export function CitationViewer({
   document,
   highlightedBoundingBoxId,
+  activeCitation = null,
 }: CitationViewerProps) {
   const [numPages, setNumPages] = useState(0);
   const [pageWidth, setPageWidth] = useState(600);
@@ -102,16 +108,24 @@ export function CitationViewer({
   }, []);
 
   useEffect(() => {
-    if (!highlightedBoundingBoxId || !document) return;
+    const targetPage =
+      activeCitation?.page ??
+      document?.boundingBoxes.find((box) => box.id === highlightedBoundingBoxId)
+        ?.page;
 
-    const box = document.boundingBoxes.find(
-      (b) => b.id === highlightedBoundingBoxId,
-    );
-    if (!box) return;
+    if (!targetPage) return;
 
-    const pageEl = pageRefs.current.get(box.page);
-    pageEl?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [highlightedBoundingBoxId, document]);
+    const pageEl = pageRefs.current.get(targetPage);
+    pageEl?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [activeCitation, highlightedBoundingBoxId, document, numPages]);
+
+  const layoutBoxes =
+    document?.boundingBoxes.filter((box) => hasLayoutOverlay(box)) ?? [];
+
+  const citationPreview =
+    activeCitation?.text ??
+    document?.boundingBoxes.find((box) => box.id === highlightedBoundingBoxId)
+      ?.text;
 
   const onDocumentLoadSuccess = useCallback(({ numPages: pages }: { numPages: number }) => {
     setNumPages(pages);
@@ -155,7 +169,18 @@ export function CitationViewer({
   }
 
   return (
-    <div ref={containerRef} className="h-full overflow-y-auto bg-zinc-100 p-4">
+    <div className="flex h-full min-h-0 flex-col bg-zinc-100">
+      {activeCitation && citationPreview && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+            Citation [{activeCitation.label}] · Page {activeCitation.page}
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-950">
+            {citationPreview}
+          </p>
+        </div>
+      )}
+      <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto p-4">
       <Document
         file={pdfFile}
         onLoadSuccess={onDocumentLoadSuccess}
@@ -192,9 +217,9 @@ export function CitationViewer({
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
               />
-              {document.boundingBoxes.length > 0 && (
+              {layoutBoxes.length > 0 && (
                 <BoundingBoxOverlay
-                  boxes={document.boundingBoxes}
+                  boxes={layoutBoxes}
                   pageNumber={pageNumber}
                   pageWidth={pageWidth}
                   pageHeight={pageHeight}
@@ -205,6 +230,7 @@ export function CitationViewer({
           );
         })}
       </Document>
+      </div>
     </div>
   );
 }

@@ -35,6 +35,7 @@ export function SplitPaneLayout({
   const highlightedBoundingBoxId = useWorkspaceStore(
     (s) => s.highlightedBoundingBoxId,
   );
+  const activeCitation = useWorkspaceStore((s) => s.activeCitation);
   const viewerOpen = useWorkspaceStore((s) => s.viewerOpen);
   const setDocuments = useWorkspaceStore((s) => s.setDocuments);
   const setActiveDocument = useWorkspaceStore((s) => s.setActiveDocument);
@@ -116,6 +117,7 @@ export function SplitPaneLayout({
           <CitationViewer
             document={activeDocument}
             highlightedBoundingBoxId={highlightedBoundingBoxId}
+            activeCitation={activeCitation}
           />
         </main>
 
@@ -136,6 +138,7 @@ export function SplitPaneLayout({
         open={viewerOpen}
         document={activeDocument}
         highlightedBoundingBoxId={highlightedBoundingBoxId}
+        activeCitation={activeCitation}
         onOpenChange={setViewerOpen}
       />
     </div>

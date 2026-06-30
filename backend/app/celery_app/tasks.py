@@ -14,7 +14,7 @@ from app.celery_app.celery import celery
 from app.config import get_settings
 from app.db.session import Document, DocumentChunk, DocumentStatus, SyncSession, set_tenant_context_sync
 from app.qdrant.client import get_qdrant_client
-from app.services.chunker import chunk_text, deterministic_point_id
+from app.services.chunker import chunk_document_text, deterministic_point_id
 from app.services.embedders import check_embedder_rate_limit, get_hybrid_embedder
 from app.services.event_bus import publish_parsing_event
 from app.services.parsers import parse_pdf
@@ -96,7 +96,7 @@ def process_document(self, document_id: str, tenant_id: str) -> dict:
             pdf_bytes = storage.get_bytes(document.s3_key)
             _emit(document, progress=35, sub_state="Extracting tables")
             parsed = parse_pdf(pdf_bytes)
-            chunks = chunk_text(parsed.markdown)
+            chunks = chunk_document_text(parsed.markdown, page_count=parsed.page_count)
             if not chunks:
                 raise ValueError("No chunks produced from parsed document")
 

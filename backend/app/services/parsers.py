@@ -52,7 +52,7 @@ def _parse_with_docling(pdf_bytes: bytes) -> ParsedDocument:
 def _parse_with_pymupdf(pdf_bytes: bytes) -> ParsedDocument:
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     pages = [page.get_text("text") for page in doc]
-    markdown = "\n\n".join(pages)
+    markdown = "\f".join(pages)
     return ParsedDocument(
         markdown=markdown,
         page_count=len(doc),

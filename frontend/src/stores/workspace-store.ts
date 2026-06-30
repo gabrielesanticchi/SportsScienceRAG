@@ -13,6 +13,7 @@ interface WorkspaceState {
   uploadQueue: UploadFileItem[];
   activeDocumentId: string | null;
   highlightedBoundingBoxId: string | null;
+  activeCitation: Citation | null;
   chatMessages: ChatMessage[];
   isChatLoading: boolean;
   viewerOpen: boolean;
@@ -47,6 +48,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   uploadQueue: [],
   activeDocumentId: null,
   highlightedBoundingBoxId: null,
+  activeCitation: null,
   chatMessages: [],
   isChatLoading: false,
   viewerOpen: false,
@@ -81,7 +83,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     })),
 
   setActiveDocument: (id) =>
-    set({ activeDocumentId: id, viewerOpen: id !== null }),
+    set({
+      activeDocumentId: id,
+      viewerOpen: id !== null,
+      activeCitation: id === null ? null : get().activeCitation,
+    }),
 
   toggleDocumentSelection: (id) =>
     set((state) => ({
@@ -110,6 +116,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({
       activeDocumentId: citation.documentId,
       highlightedBoundingBoxId: citation.boundingBoxId,
+      activeCitation: citation,
       viewerOpen: true,
     });
   },

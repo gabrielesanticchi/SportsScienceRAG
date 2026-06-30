@@ -16,6 +16,7 @@ export interface BoundingBox {
   height: number;
   type: BoundingBoxType;
   text?: string;
+  estimated?: boolean;
 }
 
 export interface UploadFileItem {

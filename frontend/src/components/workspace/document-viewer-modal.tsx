@@ -7,12 +7,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CitationViewer } from "@/components/workspace/citation-viewer";
-import type { WorkspaceDocument } from "@/lib/types";
+import type { Citation, WorkspaceDocument } from "@/lib/types";
 
 interface DocumentViewerModalProps {
   open: boolean;
   document: WorkspaceDocument | null;
   highlightedBoundingBoxId: string | null;
+  activeCitation?: Citation | null;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -20,6 +21,7 @@ export function DocumentViewerModal({
   open,
   document,
   highlightedBoundingBoxId,
+  activeCitation = null,
   onOpenChange,
 }: DocumentViewerModalProps) {
   return (
@@ -32,6 +34,7 @@ export function DocumentViewerModal({
           <CitationViewer
             document={document}
             highlightedBoundingBoxId={highlightedBoundingBoxId}
+            activeCitation={activeCitation}
           />
         </div>
       </DialogContent>
