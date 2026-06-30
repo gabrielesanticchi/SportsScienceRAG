@@ -25,7 +25,7 @@ def test_constants():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -45,7 +45,7 @@ def test_error_classes():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -78,7 +78,7 @@ def test_paper_dataclass():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -112,7 +112,7 @@ def test_paper_chunk_dataclass():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -149,7 +149,7 @@ def test_search_result_dataclass():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -186,7 +186,7 @@ def test_pdf_extractor_init():
     import json
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -212,7 +212,7 @@ def test_pdf_extractor_manual_mappings(tmp_path):
     import json
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -246,7 +246,7 @@ def test_section_detection_success():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -294,7 +294,7 @@ def test_section_detection_failure_no_manual_mapping():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -322,7 +322,7 @@ def test_section_detection_with_manual_mapping(tmp_path):
     import json
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -361,7 +361,7 @@ def test_metadata_extraction():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -400,7 +400,7 @@ def test_metadata_extraction_year_from_filename():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -434,7 +434,7 @@ def test_metadata_extraction_returns_correct_keys():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -463,7 +463,7 @@ def test_pdf_extractor_full_extraction():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -496,7 +496,7 @@ def test_pdf_extractor_nonexistent_file():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -520,7 +520,7 @@ def test_text_chunker_init():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -544,7 +544,7 @@ def test_chunk_fixed_size():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -594,7 +594,7 @@ def test_create_chunk_helper():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -644,7 +644,7 @@ def test_chunk_fixed_size_validation():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -689,7 +689,7 @@ def test_chunk_fixed_size_empty_text():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -722,7 +722,7 @@ def test_chunk_paragraph():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -776,7 +776,7 @@ def test_chunk_paragraph_fallback_single_newline():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -817,7 +817,7 @@ def test_chunk_paragraph_with_empty_paragraphs():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -855,7 +855,7 @@ def test_chunk_paragraph_section_detection():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -896,7 +896,7 @@ def test_chunk_paragraph():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -940,7 +940,7 @@ def test_chunk_semantic():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -976,7 +976,7 @@ def test_chunk_all_strategies():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1015,7 +1015,7 @@ def test_vector_store_init():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1039,7 +1039,7 @@ def test_vector_store_create_collection():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1076,7 +1076,7 @@ def test_vector_store_create_collection_invalid_dimension():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1107,7 +1107,7 @@ def test_upload_chunks_basic():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1174,33 +1174,26 @@ def test_upload_chunks_basic():
 
     assert len(points) == 3
 
-    # Verify first point (semantic strategy)
-    point_0 = points[0]
-    assert "semantic" in point_0.vector
-    assert "paragraph" not in point_0.vector
-    assert "fixed" not in point_0.vector
-    assert len(point_0.vector["semantic"]) == 384
-    assert point_0.payload["paper_filename"] == "test.pdf"
-    assert point_0.payload["section"] == "Methods"
-    assert point_0.payload["chunk_strategy"] == "semantic"
-    assert point_0.payload["authors"] == "Smith et al."
-    assert point_0.payload["year"] == 2020
-    assert point_0.payload["DOI"] == "10.1234/test"
-    assert point_0.payload["journal"] == "Nature"
+    # scroll() returns points in arbitrary order (point IDs are UUIDs), so index
+    # the points by their chunk_strategy payload rather than assuming insertion order.
+    by_strategy = {point.payload["chunk_strategy"]: point for point in points}
+    assert set(by_strategy) == {"semantic", "paragraph", "fixed"}
 
-    # Verify second point (paragraph strategy)
-    point_1 = points[1]
-    assert "paragraph" in point_1.vector
-    assert "semantic" not in point_1.vector
-    assert "fixed" not in point_1.vector
-    assert point_1.payload["chunk_strategy"] == "paragraph"
+    # Each chunk is stored as a single named vector matching its strategy.
+    for strategy, point in by_strategy.items():
+        other_strategies = {"semantic", "paragraph", "fixed"} - {strategy}
+        assert strategy in point.vector
+        assert all(other not in point.vector for other in other_strategies)
+        assert len(point.vector[strategy]) == 384
 
-    # Verify third point (fixed strategy)
-    point_2 = points[2]
-    assert "fixed" in point_2.vector
-    assert "semantic" not in point_2.vector
-    assert "paragraph" not in point_2.vector
-    assert point_2.payload["chunk_strategy"] == "fixed"
+    # Verify shared payload metadata on the semantic point.
+    semantic_point = by_strategy["semantic"]
+    assert semantic_point.payload["paper_filename"] == "test.pdf"
+    assert semantic_point.payload["section"] == "Methods"
+    assert semantic_point.payload["authors"] == "Smith et al."
+    assert semantic_point.payload["year"] == 2020
+    assert semantic_point.payload["DOI"] == "10.1234/test"
+    assert semantic_point.payload["journal"] == "Nature"
 
 
 def test_upload_chunks_batch_processing():
@@ -1208,7 +1201,7 @@ def test_upload_chunks_batch_processing():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1257,7 +1250,7 @@ def test_upload_chunks_empty_list():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1290,7 +1283,7 @@ def test_upload_chunks_metadata_with_none_values():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1343,7 +1336,7 @@ def test_search_basic():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1412,7 +1405,7 @@ def test_search_with_section_filter():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1477,7 +1470,7 @@ def test_search_with_year_filter():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1542,7 +1535,7 @@ def test_search_with_paper_filter():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1607,7 +1600,7 @@ def test_search_with_multiple_filters():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1685,7 +1678,7 @@ def test_search_no_results():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1735,7 +1728,7 @@ def test_search_respects_limit():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1787,7 +1780,7 @@ def test_search_results_have_scores():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1838,7 +1831,7 @@ def test_search_empty_query_raises_error():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1871,7 +1864,7 @@ def test_search_invalid_strategy_raises_error():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1900,7 +1893,7 @@ def test_search_invalid_limit_raises_error():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1937,7 +1930,7 @@ def test_search_filter_too_long_raises_error():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -1983,7 +1976,7 @@ def _load_module():
     import importlib.util
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine", module_path
     )
@@ -2278,7 +2271,7 @@ def test_semantic_search_engine_init():
     from qdrant_client import QdrantClient
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -2318,7 +2311,7 @@ def test_semantic_search_engine_init_with_manual_mappings():
     import json
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -2359,7 +2352,7 @@ def test_semantic_search_engine_process_papers_no_pdfs():
     from qdrant_client import QdrantClient
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -2393,7 +2386,7 @@ def test_semantic_search_engine_process_papers_creates_collection(tmp_path):
     import fitz  # PyMuPDF
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
@@ -2458,7 +2451,7 @@ def test_semantic_search_engine_process_papers_recreate_collection(tmp_path):
     import fitz
 
     project_root = Path(__file__).parent.parent
-    module_path = project_root / "12_handson_sportscience_semantic_engine.py"
+    module_path = project_root / "handson" / "12_handson_sportscience_semantic_engine.py"
 
     spec = importlib.util.spec_from_file_location(
         "handson_sportscience_semantic_engine",
