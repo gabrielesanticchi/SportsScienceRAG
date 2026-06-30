@@ -7,12 +7,12 @@ from datetime import UTC, datetime
 
 from celery.exceptions import MaxRetriesExceededError
 from qdrant_client import models
-from sqlalchemy import create_engine, select, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 
 from app.celery_app.celery import celery
 from app.config import get_settings
-from app.db.session import Document, DocumentChunk, DocumentStatus
+from app.db.session import Document, DocumentChunk, DocumentStatus, SyncSession, set_tenant_context_sync
 from app.qdrant.client import get_qdrant_client
 from app.services.chunker import chunk_text, deterministic_point_id
 from app.services.embedders import check_embedder_rate_limit, get_hybrid_embedder
@@ -22,9 +22,6 @@ from app.storage.s3 import ObjectStorage
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-sync_engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
-SyncSession = sessionmaker(bind=sync_engine, expire_on_commit=False)
 
 
 def _compute_retry_delay(attempt: int, jitter_bound: float) -> float:
