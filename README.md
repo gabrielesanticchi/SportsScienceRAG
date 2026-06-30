@@ -114,3 +114,35 @@ print(results["analysis"]["top_strategy"])
 - `VectorStore.upload_chunks` encodes chunks one at a time and uses sequential
   integer point IDs — batch encoding and UUID IDs are pending optimizations.
 - `avg_chunk_size` in the analysis output is an approximation.
+
+## Document Workspace Frontend
+
+The `frontend/` directory contains a NotebookLM-style document workspace UI built with **Next.js 16 (App Router)** and **React 19**. This provides an interactive interface for uploading PDFs, viewing source documents with citations, and conducting multi-document chat sessions.
+
+### Features
+
+- **Drag-and-drop PDF ingestion** — PDF-only uploads (max 50MB), local UUID tracking, status progression (PENDING → UPLOADING → PROCESSING → COMPLETED/FAILED)
+- **Real-time parsing updates** — Server-Sent Events stream granular sub-states (e.g. "Extracting tables", "Generating embeddings")
+- **Split-pane workspace layout** — Three-column interface:
+  - **Left**: Source manager grid showing document cards with checkboxes for selecting chat context
+  - **Center**: Citation viewer with interactive PDF rendering and SVG bounding box overlays
+  - **Right**: Multi-document chat panel with citation chips that scroll and highlight source passages
+- **Interactive citations** — Click chat citations to scroll PDF, highlight relevant bounding boxes, and navigate source documents
+- **Multi-tenant security** — Axios interceptor automatically attaches `Authorization: Bearer <JWT>` on all requests; search queries filter by selected `document_ids`
+
+### Quick start
+
+See [`frontend/README.md`](frontend/README.md) for detailed setup instructions and architecture overview.
+
+```bash
+cd frontend
+npm install
+npm run dev
+# Open http://localhost:3000/workspace/default
+```
+
+The frontend includes mock API routes at `/api/v1` for local development without a running Python backend. To integrate with the Python RAG backend, set `NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1` in `.env.local`.
+
+### Backend integration
+
+The frontend communicates with a Python backend via REST API. All requests require JWT authentication with a `tenant_id` in the token payload. For the mock API contract and detailed endpoint specifications, see [`docs/CODEMAPS/frontend.md`](docs/CODEMAPS/frontend.md#backend-contract).
