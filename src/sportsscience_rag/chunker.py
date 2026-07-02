@@ -67,14 +67,12 @@ class SectionChunker:
         normalized_pages = [(no, _normalize(text)) for no, text in page_texts]
         chunks: list[Chunk] = []
         index = 0
-        prev_values: dict[str, str] = {}
         for section in self._header_splitter.split_text(markdown):
-            section_path = self._build_section_path(section.metadata, prev_values)
-            prev_values = {
-                name: section.metadata[name]
+            section_path = " > ".join(
+                section.metadata[name]
                 for _, name in self._headers
                 if name in section.metadata
-            }
+            )
             for text in self._split_preserving_tables(section.page_content):
                 cleaned = text.strip()
                 if not cleaned:
@@ -89,27 +87,6 @@ class SectionChunker:
                 )
                 index += 1
         return chunks
-
-    def _build_section_path(
-        self, metadata: dict[str, str], prev_values: dict[str, str]
-    ) -> str:
-        """Join header values that changed since the previous section.
-
-        Header values that repeat unchanged from the prior section (an ancestor
-        heading still in scope) are dropped from the path; only the diverging
-        tail is kept, e.g. a new "## Methods" under an unchanged "# Introduction"
-        yields "Methods > Algorithm 3.2" rather than repeating "Introduction".
-        """
-        names = [name for _, name in self._headers]
-        diverged = False
-        parts: list[str] = []
-        for name in names:
-            current = metadata.get(name)
-            if not diverged and current != prev_values.get(name):
-                diverged = True
-            if diverged and current is not None:
-                parts.append(current)
-        return " > ".join(parts)
 
     def _pages_for(
         self, chunk_text: str, normalized_pages: list[tuple[int, str]]
