@@ -601,11 +601,25 @@ We compute metabolic power from GPS and IMU fusion signals here.
 """
 
 
-def test_sections_carry_hierarchical_path():
+def test_sections_carry_absolute_hierarchical_path():
+    # section_path is the FULL active-header chain (absolute provenance),
+    # not a diff against the previous section.
     chunks = _chunker().chunk(MD)
     paths = {c.section_path for c in chunks}
     assert "Introduction" in paths
-    assert "Methods > Algorithm 3.2" in paths
+    assert "Introduction > Methods > Algorithm 3.2" in paths
+
+
+def test_distinct_sections_do_not_collide():
+    # Two different top-level sections each containing a "## Setup" must yield
+    # distinct absolute paths (no ancestor dropping / collision).
+    md = (
+        "# StudyA\n\n## Setup\n\nalpha setup details here\n\n"
+        "# StudyB\n\n## Setup\n\nbeta setup details here\n"
+    )
+    paths = [c.section_path for c in _chunker().chunk(md)]
+    assert "StudyA > Setup" in paths
+    assert "StudyB > Setup" in paths
 
 
 def test_indices_are_sequential_from_zero():
