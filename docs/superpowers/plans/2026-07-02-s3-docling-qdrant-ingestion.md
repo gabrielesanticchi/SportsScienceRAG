@@ -14,7 +14,8 @@
 - **Parser:** Docling, local, `do_ocr=False`. Export markdown + structured content. Preserve headings/tables/equations. No cloud parser.
 - **Embedding:** local FastEmbed `sentence-transformers/all-MiniLM-L6-v2`, 384-dim, client-side vectors. No Qdrant server-side `models.Document` inference.
 - **Point ID:** `uuid5(NAMESPACE, f"{content_hash}:{chunk_index}")`; `content_hash = sha256(raw_pdf_bytes)` hex.
-- **Chunking:** `MarkdownHeaderTextSplitter` on `#`/`##`/`###` → `RecursiveCharacterTextSplitter` size guard. Default child chunk ≤ 512 tokens, 64-token overlap, tokenizer length function (not raw chars). Never split mid-table.
+- **Chunking:** `MarkdownHeaderTextSplitter` on `#`/`##`/`###` → `RecursiveCharacterTextSplitter` size guard. Default child chunk ≤ **256 tokens, 32-token overlap**, measured by a **real tokenizer length function** built from the MiniLM tokenizer (`sentence-transformers/all-MiniLM-L6-v2`, which truncates at 256 tokens) — injectable so unit tests stay fast. Never split mid-table.
+- **Page provenance:** best-effort. The parser emits per-page text; the chunker attributes `page_numbers` to each chunk by matching its normalized leading text against per-page text. Unmatched → empty tuple.
 - **Qdrant collection:** single named vector `text_embedding`, size 384, cosine. Create only if absent.
 - **Payload per chunk:** `source`, `content_hash`, `page_numbers`, `section_path`, `chunk_index`, `parser_version`, `chunk_config_hash`, `text`.
 - **Page images:** 150 DPI renders → `s3://<bucket>/<derived_prefix><content_hash>/screenshots/page-<N>.png`; idempotent upload (skip if exists); never embedded.
@@ -167,7 +168,7 @@ git commit -m "chore: remove backend/frontend/handson, scaffold sportsscience_ra
   - `models.RawPdf(source: str, key: str, data: bytes, content_hash: str)` (frozen)
   - `models.PageRender(page_number: int, image: PIL.Image.Image)` (frozen, eq=False)
   - `models.Chunk(index: int, text: str, section_path: str, page_numbers: tuple[int, ...])` (frozen)
-  - `models.ParsedDocument(markdown: str, page_count: int, renders: tuple[PageRender, ...], is_empty: bool)` (frozen, eq=False)
+  - `models.ParsedDocument(markdown: str, page_count: int, renders: tuple[PageRender, ...], is_empty: bool, page_texts: tuple[tuple[int, str], ...])` (frozen, eq=False) — `page_texts` is `(page_no, normalized_page_text)` for best-effort page mapping
   - `models.QuarantineEntry(source: str, content_hash: str, stage: str, error_class: str, message: str)` (frozen)
   - `models.IngestOutcome(source: str, content_hash: str, status: str, n_chunks: int)` (frozen)
   - `config.IngestionConfig` (frozen) with `from_env(env_path: Path | None = None) -> IngestionConfig` and property `chunk_config_hash: str`
@@ -269,6 +270,7 @@ class ParsedDocument:
     page_count: int
     renders: tuple[PageRender, ...]
     is_empty: bool
+    page_texts: tuple[tuple[int, str], ...]  # (page_no, normalized text) for page mapping
 
 
 @dataclass(frozen=True)
@@ -376,8 +378,8 @@ class IngestionConfig:
     qdrant_url: str
     qdrant_api_key: str
     qdrant_collection: str = "sport-science-documents"
-    chunk_size: int = 512
-    chunk_overlap: int = 64
+    chunk_size: int = 256   # MiniLM truncates at 256 tokens
+    chunk_overlap: int = 32
     headers: tuple[tuple[str, str], ...] = field(default=DEFAULT_HEADERS)
     image_dpi: int = 150
     derived_prefix: str = "derived/"
@@ -562,8 +564,9 @@ git commit -m "feat: S3 PDF listing and fetching"
 **Interfaces:**
 - Consumes: `config.IngestionConfig` (uses `headers`, `chunk_size`, `chunk_overlap`); produces `models.Chunk`.
 - Produces:
-  - `chunker.SectionChunker(config: IngestionConfig)` with `chunk(markdown: str) -> list[Chunk]`
-  - Behavior: split on markdown headers into sections; each section's text further split by a `RecursiveCharacterTextSplitter` size guard; `section_path` joins active header values with `" > "`; a markdown table block (lines starting with `|`) is never split across chunks; `page_numbers` is `()` (page attribution happens at parse time in a later iteration — kept empty here). `index` is a 0-based running counter across the document.
+  - `chunker.SectionChunker(config: IngestionConfig, token_length: Callable[[str], int] | None = None)` — `token_length` counts tokens; when `None`, lazily built from the MiniLM HF tokenizer. Tests inject a fast fake (e.g. word count).
+  - `.chunk(markdown: str, page_texts: tuple[tuple[int, str], ...] = ()) -> list[Chunk]`
+  - Behavior: split on markdown headers into sections; each section's text further split by a token-length `RecursiveCharacterTextSplitter` size guard; `section_path` joins active header values with `" > "`; a markdown table block (lines starting with `|`) is never split across chunks; `index` is a 0-based running counter across the document. `page_numbers` is best-effort: match the chunk's normalized leading text against each `(page_no, page_text)`; attribute every page whose text contains that signature; `()` if none match or `page_texts` is empty.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -578,6 +581,14 @@ CFG = IngestionConfig(
     chunk_size=40, chunk_overlap=5,
 )
 
+# Fast, deterministic fake tokenizer (word count) so tests need no model.
+WORD_LEN = lambda t: len(t.split())
+
+
+def _chunker():
+    return SectionChunker(CFG, token_length=WORD_LEN)
+
+
 MD = """# Introduction
 
 Soccer performance monitoring uses wearable sensors extensively today.
@@ -591,20 +602,20 @@ We compute metabolic power from GPS and IMU fusion signals here.
 
 
 def test_sections_carry_hierarchical_path():
-    chunks = SectionChunker(CFG).chunk(MD)
+    chunks = _chunker().chunk(MD)
     paths = {c.section_path for c in chunks}
     assert "Introduction" in paths
     assert "Methods > Algorithm 3.2" in paths
 
 
 def test_indices_are_sequential_from_zero():
-    chunks = SectionChunker(CFG).chunk(MD)
+    chunks = _chunker().chunk(MD)
     assert [c.index for c in chunks] == list(range(len(chunks)))
 
 
 def test_table_block_not_split():
     md = "# T\n\n| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |\n"
-    chunks = SectionChunker(CFG).chunk(md)
+    chunks = _chunker().chunk(md)
     table_chunks = [c for c in chunks if "| a | b |" in c.text]
     assert len(table_chunks) == 1
     assert "| 3 | 4 |" in table_chunks[0].text
@@ -612,8 +623,25 @@ def test_table_block_not_split():
 
 def test_large_section_is_split_by_size_guard():
     big = "# Big\n\n" + ("word " * 300)
-    chunks = SectionChunker(CFG).chunk(big)
+    chunks = _chunker().chunk(big)
     assert len(chunks) > 1
+
+
+def test_page_numbers_best_effort_from_page_texts():
+    md = "# Intro\n\nsoccer performance monitoring uses wearable sensors\n"
+    page_texts = (
+        (1, "soccer performance monitoring uses wearable sensors extensively"),
+        (2, "unrelated content about nutrition and recovery protocols"),
+    )
+    chunks = _chunker().chunk(md, page_texts)
+    assert chunks[0].page_numbers == (1,)
+
+
+def test_page_numbers_empty_when_no_match():
+    md = "# Intro\n\ncontent that appears on no page at all here\n"
+    page_texts = ((1, "totally different words about hydration"),)
+    chunks = _chunker().chunk(md, page_texts)
+    assert chunks[0].page_numbers == ()
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -624,11 +652,13 @@ Expected: FAIL (`ModuleNotFoundError`)
 - [ ] **Step 3: Implement `chunker.py`**
 
 ```python
-"""Heading-aware markdown chunking with a size guard."""
+"""Heading-aware markdown chunking with a token-budget size guard."""
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from functools import lru_cache
 
 from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
@@ -639,25 +669,56 @@ from sportsscience_rag.config import IngestionConfig
 from sportsscience_rag.models import Chunk
 
 _TABLE_LINE = re.compile(r"^\s*\|.*\|\s*$")
+_NORMALIZE = re.compile(r"[^a-z0-9 ]+")
+_SIGNATURE_WORDS = 6  # leading words used to locate a chunk on a page
+
+DENSE_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+
+@lru_cache(maxsize=1)
+def _default_token_length() -> Callable[[str], int]:
+    """Build a token-count function from the MiniLM tokenizer (lazy import)."""
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(DENSE_MODEL)
+
+    def _length(text: str) -> int:
+        return len(tokenizer.encode(text, add_special_tokens=False))
+
+    return _length
+
+
+def _normalize(text: str) -> str:
+    return _NORMALIZE.sub(" ", text.lower()).strip()
 
 
 class SectionChunker:
-    """Splits Docling markdown into heading-scoped, size-bounded chunks."""
+    """Splits Docling markdown into heading-scoped, token-bounded chunks."""
 
-    def __init__(self, config: IngestionConfig) -> None:
+    def __init__(
+        self,
+        config: IngestionConfig,
+        token_length: Callable[[str], int] | None = None,
+    ) -> None:
         self._headers = list(config.headers)
         self._header_splitter = MarkdownHeaderTextSplitter(
             headers_to_split_on=self._headers,
             strip_headers=True,
         )
-        # ~4 chars/token heuristic keeps the guard tokenizer-free but bounded.
+        length_function = token_length or _default_token_length()
         self._size_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=config.chunk_size * 4,
-            chunk_overlap=config.chunk_overlap * 4,
+            chunk_size=config.chunk_size,
+            chunk_overlap=config.chunk_overlap,
+            length_function=length_function,
             separators=["\n\n", "\n", " ", ""],
         )
 
-    def chunk(self, markdown: str) -> list[Chunk]:
+    def chunk(
+        self,
+        markdown: str,
+        page_texts: tuple[tuple[int, str], ...] = (),
+    ) -> list[Chunk]:
+        normalized_pages = [(no, _normalize(text)) for no, text in page_texts]
         chunks: list[Chunk] = []
         index = 0
         for section in self._header_splitter.split_text(markdown):
@@ -675,14 +736,24 @@ class SectionChunker:
                         index=index,
                         text=cleaned,
                         section_path=section_path,
-                        page_numbers=(),
+                        page_numbers=self._pages_for(cleaned, normalized_pages),
                     )
                 )
                 index += 1
         return chunks
 
+    def _pages_for(
+        self, chunk_text: str, normalized_pages: list[tuple[int, str]]
+    ) -> tuple[int, ...]:
+        if not normalized_pages:
+            return ()
+        signature = " ".join(_normalize(chunk_text).split()[:_SIGNATURE_WORDS])
+        if not signature:
+            return ()
+        return tuple(no for no, page in normalized_pages if signature in page)
+
     def _split_preserving_tables(self, text: str) -> list[str]:
-        """Split text by size but keep contiguous table blocks intact."""
+        """Split text by token budget but keep contiguous table blocks intact."""
         parts: list[str] = []
         buffer: list[str] = []
         in_table = False
@@ -1131,7 +1202,7 @@ git commit -m "feat: Qdrant store with uuid5 IDs and idempotent upsert"
 - Produces:
   - `parser.PARSER_VERSION: str` (e.g. `"docling-<version>"`)
   - `parser.DoclingParser(image_dpi: int = 150, min_chars: int = 20)` with `.parse(data: bytes, name: str) -> ParsedDocument`
-  - Behavior: OCR off; export markdown; generate per-page images at `image_dpi`; `is_empty=True` when stripped markdown length < `min_chars`.
+  - Behavior: OCR off; export markdown; generate per-page images at `image_dpi`; build `page_texts` = `(page_no, concatenated text of items on that page)` from the structured document for best-effort page mapping; `is_empty=True` when stripped markdown length < `min_chars`.
 
 - [ ] **Step 1: Write failing/integration tests**
 
@@ -1160,6 +1231,9 @@ def test_parse_real_pdf_produces_markdown_and_renders():
     assert result.page_count >= 1
     assert len(result.renders) == result.page_count
     assert result.renders[0].image.width > 0
+    assert len(result.page_texts) >= 1
+    assert result.page_texts[0][0] >= 1  # a page number
+    assert isinstance(result.page_texts[0][1], str)
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -1216,7 +1290,22 @@ class DoclingParser:
             page_count=len(pages),
             renders=renders,
             is_empty=is_empty,
+            page_texts=self._page_texts(document),
         )
+
+    @staticmethod
+    def _page_texts(document) -> tuple[tuple[int, str], ...]:
+        """Concatenate each text item's text under the page number it came from."""
+        by_page: dict[int, list[str]] = {}
+        for item in getattr(document, "texts", []):
+            text = getattr(item, "text", "") or ""
+            if not text.strip():
+                continue
+            for prov in getattr(item, "prov", []) or []:
+                page_no = getattr(prov, "page_no", None)
+                if page_no is not None:
+                    by_page.setdefault(page_no, []).append(text)
+        return tuple((no, " ".join(by_page[no])) for no in sorted(by_page))
 ```
 
 - [ ] **Step 4: Run tests to verify pass**
@@ -1440,7 +1529,7 @@ def test_happy_path_upserts_and_reports_done():
     d["source"].list_pdfs.return_value = [("k.pdf", "s3://bkt/k.pdf")]
     d["source"].fetch.return_value = b"PDF"
     d["store"].already_ingested.return_value = False
-    d["parser"].parse.return_value = ParsedDocument("# H\n\ntext", 1, (), False)
+    d["parser"].parse.return_value = ParsedDocument("# H\n\ntext", 1, (), False, ())
     d["chunker"].chunk.return_value = [Chunk(0, "text", "H", ())]
     d["embedder"].embed.return_value = [[0.0] * 384]
     d["store"].upsert.return_value = 1
@@ -1468,7 +1557,7 @@ def test_empty_document_is_quarantined():
     d["source"].list_pdfs.return_value = [("k.pdf", "s3://bkt/k.pdf")]
     d["source"].fetch.return_value = b"PDF"
     d["store"].already_ingested.return_value = False
-    d["parser"].parse.return_value = ParsedDocument("", 1, (), True)
+    d["parser"].parse.return_value = ParsedDocument("", 1, (), True, ())
 
     result = p.run([""])
     assert result.outcomes[0].status == "quarantined"
@@ -1481,7 +1570,7 @@ def test_exception_quarantines_and_continues():
     d["source"].list_pdfs.return_value = [("a.pdf", "s3://bkt/a.pdf"), ("b.pdf", "s3://bkt/b.pdf")]
     d["source"].fetch.return_value = b"PDF"
     d["store"].already_ingested.return_value = False
-    d["parser"].parse.side_effect = [RuntimeError("corrupt"), ParsedDocument("# H\n\nt", 1, (), False)]
+    d["parser"].parse.side_effect = [RuntimeError("corrupt"), ParsedDocument("# H\n\nt", 1, (), False, ())]
     d["chunker"].chunk.return_value = [Chunk(0, "t", "H", ())]
     d["embedder"].embed.return_value = [[0.0] * 384]
     d["store"].upsert.return_value = 1
@@ -1603,7 +1692,7 @@ class IngestionPipeline:
             self._render_store.upload(chash, parsed.renders)
 
             stage = "chunk"
-            chunks = self._chunker.chunk(parsed.markdown)
+            chunks = self._chunker.chunk(parsed.markdown, parsed.page_texts)
             if not chunks:
                 return (
                     self._done(source_url, chash, "quarantined", 0, start),
