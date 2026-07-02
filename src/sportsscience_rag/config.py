@@ -27,6 +27,25 @@ _REQUIRED = (
 
 @dataclass(frozen=True)
 class IngestionConfig:
+    """Environment-driven configuration for document ingestion pipeline.
+
+    Immutable configuration container for AWS S3, Qdrant vector DB, and chunking
+    parameters. Load from environment variables via from_env() classmethod.
+
+    Attributes:
+        aws_access_key_id: AWS access key for S3 authentication.
+        aws_secret_access_key: AWS secret access key for S3 authentication.
+        aws_region: AWS region where S3 bucket and services are located.
+        s3_bucket: S3 bucket name for storing traces and processed documents.
+        qdrant_url: URL endpoint of the Qdrant vector database.
+        qdrant_api_key: API key for Qdrant authentication.
+        qdrant_collection: Qdrant collection name (default: "sport-science-documents").
+        chunk_size: Maximum tokens per chunk (default: 256, aligned with MiniLM).
+        chunk_overlap: Token overlap between consecutive chunks (default: 32).
+        headers: Tuple of markdown header (text, tag) pairs for hierarchical parsing.
+        image_dpi: DPI setting for PDF image rendering (default: 150).
+        derived_prefix: S3 prefix for derived/processed artifacts (default: "derived/").
+    """
     aws_access_key_id: str
     aws_secret_access_key: str
     aws_region: str
@@ -42,6 +61,20 @@ class IngestionConfig:
 
     @classmethod
     def from_env(cls, env_path: Path | None = None) -> "IngestionConfig":
+        """Load configuration from environment variables.
+
+        Args:
+            env_path: Optional path to a .env file to load before reading variables.
+                If provided, variables are loaded via dotenv before lookup.
+
+        Returns:
+            IngestionConfig instance populated from environment.
+
+        Raises:
+            ValueError: If any required environment variable is missing or empty.
+                Required variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+                AWS_REGION, S3_BUCKET, QDRANT_URL, QDRANT_API_KEY.
+        """
         if env_path is not None:
             load_dotenv(env_path)
         values = {key: os.getenv(key, "") for key in _REQUIRED}
@@ -60,4 +93,12 @@ class IngestionConfig:
 
     @property
     def chunk_config_hash(self) -> str:
+        """Deterministic hash of chunking configuration.
+
+        Combines chunk_size, chunk_overlap, and headers tuple into a single hash
+        for deduplication and caching of chunked documents with identical settings.
+
+        Returns:
+            Hexadecimal hash string of the chunking configuration.
+        """
         return chunk_config_hash(self.chunk_size, self.chunk_overlap, self.headers)
