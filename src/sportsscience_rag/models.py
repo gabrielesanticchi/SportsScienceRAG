@@ -28,7 +28,7 @@ class PageRender:
     """Rendered page image from a PDF.
 
     Attributes:
-        page_number: Zero-indexed page number in the document.
+        page_number: 1-indexed page number (Docling page numbering).
         image: PIL Image object of the rendered page.
     """
     page_number: int
@@ -62,7 +62,8 @@ class ParsedDocument:
         is_empty: True if the document's text layer is empty or near-empty,
             indicating it should be quarantined for manual review.
         page_texts: Tuple of (page_no, normalized_text) pairs for best-effort
-            page-to-content mapping across all pages.
+            page-to-content mapping across all pages. Page numbers are
+            1-indexed (Docling page numbering).
     """
     markdown: str
     page_count: int

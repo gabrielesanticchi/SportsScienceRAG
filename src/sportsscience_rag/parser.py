@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import io
+import logging
 from importlib.metadata import PackageNotFoundError, version
+from typing import Any
 
 from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
 from sportsscience_rag.models import PageRender, ParsedDocument
+
+logger = logging.getLogger(__name__)
 
 
 def _docling_version() -> str:
@@ -87,6 +91,11 @@ class DoclingParser:
             for page in pages
             if page.image is not None and page.image.pil_image is not None
         )
+        if len(renders) < len(pages):
+            logger.warning(
+                "Only %d of %d pages produced a render for %s",
+                len(renders), len(pages), name,
+            )
         is_empty = len(markdown.strip()) < self._min_chars
         return ParsedDocument(
             markdown=markdown,
@@ -97,7 +106,7 @@ class DoclingParser:
         )
 
     @staticmethod
-    def _page_texts(document) -> tuple[tuple[int, str], ...]:
+    def _page_texts(document: Any) -> tuple[tuple[int, str], ...]:
         """Concatenate each text item's text under the page it originated from.
 
         Iterates the structured document's text items and groups their content
