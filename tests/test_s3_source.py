@@ -34,6 +34,29 @@ def test_list_pdfs_respects_limit():
     assert len(src.list_pdfs([""], limit=2)) == 2
 
 
+def test_list_pdfs_limit_caps_across_prefixes():
+    client = MagicMock()
+    paginator = MagicMock()
+
+    def _paginate(Bucket, Prefix):
+        pages = {
+            "a/": [{"Contents": [{"Key": "a/1.pdf"}, {"Key": "a/2.pdf"}]}],
+            "b/": [{"Contents": [{"Key": "b/1.pdf"}, {"Key": "b/2.pdf"}]}],
+        }
+        return iter(pages[Prefix])
+
+    paginator.paginate.side_effect = _paginate
+    client.get_paginator.return_value = paginator
+
+    src = S3Source(client, "bkt")
+    result = src.list_pdfs(["a/", "b/"], limit=3)
+    assert result == [
+        ("a/1.pdf", "s3://bkt/a/1.pdf"),
+        ("a/2.pdf", "s3://bkt/a/2.pdf"),
+        ("b/1.pdf", "s3://bkt/b/1.pdf"),
+    ]  # capped at 3 total, spanning both prefixes
+
+
 def test_fetch_reads_body():
     client = MagicMock()
     body = MagicMock()
