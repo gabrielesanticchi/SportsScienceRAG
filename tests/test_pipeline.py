@@ -84,6 +84,22 @@ def test_exception_quarantines_and_continues():
     assert result.quarantine[0].error_class == "RuntimeError"
 
 
+def test_exception_in_later_stage_is_quarantined_with_stage():
+    p, d = _pipeline()
+    d["source"].list_pdfs.return_value = [("k.pdf", "s3://bkt/k.pdf")]
+    d["source"].fetch.return_value = b"PDF"
+    d["store"].already_ingested.return_value = False
+    d["parser"].parse.return_value = ParsedDocument("# H\n\ntext", 1, (), False, ())
+    d["chunker"].chunk.return_value = [Chunk(0, "text", "H", ())]
+    d["embedder"].embed.side_effect = ValueError("boom")
+
+    result = p.run([""])
+    assert result.outcomes[0].status == "quarantined"
+    assert result.quarantine[0].stage == "embed"
+    assert result.quarantine[0].error_class == "ValueError"
+    d["store"].upsert.assert_not_called()
+
+
 def test_dry_run_writes_nothing():
     p, d = _pipeline()
     d["source"].list_pdfs.return_value = [("k.pdf", "s3://bkt/k.pdf")]

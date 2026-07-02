@@ -36,3 +36,18 @@ def test_chunk_config_hash_is_property(monkeypatch):
         monkeypatch.setenv(k, v)
     cfg = IngestionConfig.from_env(env_path=None)
     assert len(cfg.chunk_config_hash) == 16
+
+
+def test_invalid_chunk_bounds_raise():
+    with pytest.raises(ValueError):
+        IngestionConfig(
+            aws_access_key_id="x", aws_secret_access_key="x", aws_region="x",
+            s3_bucket="bkt", qdrant_url="x", qdrant_api_key="x",
+            chunk_size=10, chunk_overlap=10,
+        )
+    with pytest.raises(ValueError):
+        IngestionConfig(
+            aws_access_key_id="x", aws_secret_access_key="x", aws_region="x",
+            s3_bucket="bkt", qdrant_url="x", qdrant_api_key="x",
+            chunk_size=0, chunk_overlap=0,
+        )

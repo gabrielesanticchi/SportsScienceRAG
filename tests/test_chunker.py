@@ -81,6 +81,12 @@ def test_page_numbers_best_effort_from_page_texts():
     assert chunks[0].page_numbers == (1,)
 
 
+def test_prose_without_headers_still_chunks():
+    chunks = _chunker().chunk("just some prose text with no markdown headers at all")
+    assert len(chunks) >= 1
+    assert chunks[0].section_path == ""
+
+
 def test_page_numbers_empty_when_no_match():
     md = "# Intro\n\ncontent that appears on no page at all here\n"
     page_texts = ((1, "totally different words about hydration"),)

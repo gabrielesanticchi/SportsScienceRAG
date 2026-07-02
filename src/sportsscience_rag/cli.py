@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import boto3
 from qdrant_client import QdrantClient
@@ -19,6 +21,9 @@ from sportsscience_rag.persistence import RenderStore
 from sportsscience_rag.pipeline import IngestionPipeline
 from sportsscience_rag.qdrant_store import QdrantStore
 from sportsscience_rag.s3_source import S3Source
+
+if TYPE_CHECKING:
+    from sportsscience_rag.pipeline import IngestionResult
 
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -130,7 +135,7 @@ class _DryStore:
         pass
 
 
-def _write_quarantine(args: argparse.Namespace, result) -> None:
+def _write_quarantine(args: argparse.Namespace, result: "IngestionResult") -> None:
     """Writes the quarantine report to disk if requested.
 
     Args:
@@ -140,7 +145,7 @@ def _write_quarantine(args: argparse.Namespace, result) -> None:
     """
     if not args.quarantine_report:
         return
-    payload = [vars(entry) for entry in result.quarantine]
+    payload = [dataclasses.asdict(entry) for entry in result.quarantine]
     Path(args.quarantine_report).write_text(json.dumps(payload, indent=2), encoding="utf-8")
     logger.info("Wrote quarantine report (%d entries) to %s",
                 len(payload), args.quarantine_report)

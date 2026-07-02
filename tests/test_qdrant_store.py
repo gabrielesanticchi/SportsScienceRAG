@@ -39,6 +39,13 @@ def test_already_ingested_false_when_zero():
     assert QdrantStore(client, "coll").already_ingested("h", "pv", "cc") is False
 
 
+def test_upsert_empty_chunks_returns_zero():
+    client = MagicMock()
+    n = QdrantStore(client, "coll").upsert("h", "s", "pv", "cc", [], [])
+    assert n == 0
+    client.upsert.assert_not_called()
+
+
 def test_upsert_builds_points_with_payload():
     client = MagicMock()
     store = QdrantStore(client, "coll")

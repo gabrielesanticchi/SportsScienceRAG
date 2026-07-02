@@ -59,6 +59,25 @@ class IngestionConfig:
     image_dpi: int = 150
     derived_prefix: str = "derived/"
 
+    def __post_init__(self) -> None:
+        """Validates chunking bounds.
+
+        Raises:
+            ValueError: If ``chunk_size`` is not positive, if
+                ``chunk_overlap`` is negative, or if ``chunk_overlap`` is
+                greater than or equal to ``chunk_size`` (which would prevent
+                the splitter from making forward progress).
+        """
+        if self.chunk_size <= 0:
+            raise ValueError(f"chunk_size must be positive, got {self.chunk_size}")
+        if self.chunk_overlap < 0:
+            raise ValueError(f"chunk_overlap must be non-negative, got {self.chunk_overlap}")
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({self.chunk_overlap}) must be less than "
+                f"chunk_size ({self.chunk_size})"
+            )
+
     @classmethod
     def from_env(cls, env_path: Path | None = None) -> "IngestionConfig":
         """Load configuration from environment variables.

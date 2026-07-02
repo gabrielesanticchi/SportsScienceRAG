@@ -120,9 +120,9 @@ class IngestionPipeline:
 
         for key, source_url in pdfs:
             if dry_run:
-                outcomes.append(IngestOutcome(source_url, "", "skipped", 0))
+                outcomes.append(IngestOutcome(source=source_url, content_hash="", status="skipped", n_chunks=0))
                 self._logger.event(
-                    source=source_url, content_hash="", stage="list",
+                    source=source_url, content_hash="", stage="dry-run",
                     duration_ms=0, n_chunks=0, status="skipped", error_class=None,
                 )
                 continue
@@ -164,13 +164,13 @@ class IngestionPipeline:
 
             stage = "skip-check"
             if self._store.already_ingested(chash, self._parser_version, self._config.chunk_config_hash):
-                return self._done(source_url, chash, "skipped", 0, start), None
+                return self._done(source_url, chash, "skipped", 0, start, "skip-check"), None
 
             stage = "parse"
             parsed = self._parser.parse(data, key)
             if parsed.is_empty:
                 return (
-                    self._done(source_url, chash, "quarantined", 0, start),
+                    self._done(source_url, chash, "quarantined", 0, start, "parse"),
                     QuarantineEntry(source_url, chash, "parse", "EmptyText", "empty text layer"),
                 )
 
@@ -181,7 +181,7 @@ class IngestionPipeline:
             chunks = self._chunker.chunk(parsed.markdown, parsed.page_texts)
             if not chunks:
                 return (
-                    self._done(source_url, chash, "quarantined", 0, start),
+                    self._done(source_url, chash, "quarantined", 0, start, "chunk"),
                     QuarantineEntry(source_url, chash, "chunk", "NoChunks", "no chunks produced"),
                 )
 
@@ -193,10 +193,13 @@ class IngestionPipeline:
                 chash, source_url, self._parser_version,
                 self._config.chunk_config_hash, chunks, vectors,
             )
-            return self._done(source_url, chash, "done", n, start), None
+            return self._done(source_url, chash, "done", n, start, "upsert"), None
         except Exception as exc:  # noqa: BLE001 - one bad file must not abort the batch
             entry = QuarantineEntry(source_url, chash, stage, type(exc).__name__, str(exc))
-            return self._done(source_url, chash, "quarantined", 0, start, type(exc).__name__), entry
+            return (
+                self._done(source_url, chash, "quarantined", 0, start, stage, type(exc).__name__),
+                entry,
+            )
 
     def _done(
         self,
@@ -205,6 +208,7 @@ class IngestionPipeline:
         status: str,
         n_chunks: int,
         start: float,
+        stage: str,
         error_class: str | None = None,
     ) -> IngestOutcome:
         """Emits a JSONL log event for a document and builds its outcome.
@@ -218,6 +222,9 @@ class IngestionPipeline:
             n_chunks: Number of chunks upserted (0 unless status is "done").
             start: ``time.monotonic()`` timestamp captured at the start of
                 processing, used to compute elapsed duration.
+            stage: Pipeline stage this outcome corresponds to (e.g.,
+                "skip-check", "parse", "chunk", "upsert", or the stage at
+                which an exception was raised).
             error_class: Exception class name if this outcome resulted from
                 an error, otherwise ``None``.
 
@@ -225,7 +232,7 @@ class IngestionPipeline:
             The ``IngestOutcome`` for this document.
         """
         self._logger.event(
-            source=source, content_hash=chash, stage=status,
+            source=source, content_hash=chash, stage=stage,
             duration_ms=int((time.monotonic() - start) * 1000),
             n_chunks=n_chunks, status=status, error_class=error_class,
         )
