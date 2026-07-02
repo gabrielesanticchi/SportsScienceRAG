@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import pytest
 from botocore.exceptions import ClientError
 from PIL import Image
 
@@ -35,3 +36,27 @@ def test_upload_skips_existing_objects():
     store = RenderStore(client, "bkt", "derived/")
     store.upload("abc", _renders(2))
     client.put_object.assert_not_called()
+
+
+def test_upload_reraises_non_404_errors():
+    client = MagicMock()
+    client.head_object.side_effect = ClientError(
+        {"Error": {"Code": "403", "Message": "Forbidden"}}, "HeadObject"
+    )
+    store = RenderStore(client, "bkt", "derived/")
+    with pytest.raises(ClientError):
+        store.upload("abc", _renders(1))
+    client.put_object.assert_not_called()
+
+
+def test_upload_mixed_existing_and_missing():
+    client = MagicMock()
+    # page 1 exists, page 2 missing (404)
+    client.head_object.side_effect = [{"ContentLength": 10}, _not_found()]
+    store = RenderStore(client, "bkt", "derived/")
+    keys = store.upload("abc", _renders(2))
+    assert keys == [
+        "derived/abc/screenshots/page-1.png",
+        "derived/abc/screenshots/page-2.png",
+    ]
+    assert client.put_object.call_count == 1  # only the missing page uploaded

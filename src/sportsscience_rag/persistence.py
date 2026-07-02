@@ -54,14 +54,25 @@ class RenderStore:
             key: S3 object key to check.
 
         Returns:
-            True if the object exists, False otherwise (including on any
-            ``ClientError`` such as a 404 Not Found response).
+            True if the object exists, False if the head_object call
+            returns a genuine not-found error (``404``, ``NotFound``, or
+            ``NoSuchKey``).
+
+        Raises:
+            ClientError: If ``head_object`` fails with any error other than
+                a not-found response (e.g. ``403`` AccessDenied, throttling,
+                or a 5xx server error). These are re-raised rather than
+                silently treated as "object absent" to avoid masking
+                failures during batch ingestion.
         """
         try:
             self._client.head_object(Bucket=self._bucket, Key=key)
             return True
-        except ClientError:
-            return False
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code", "")
+            if code in {"404", "NotFound", "NoSuchKey"}:
+                return False
+            raise
 
     def upload(self, content_hash: str, renders: Sequence[PageRender]) -> list[str]:
         """Uploads page renders to S3, skipping objects that already exist.
