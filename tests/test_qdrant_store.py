@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock
 
+from qdrant_client import models
+
 from sportsscience_rag.models import Chunk
-from sportsscience_rag.qdrant_store import QdrantStore, point_id
+from sportsscience_rag.qdrant_store import _INDEXED_FIELDS, QdrantStore, point_id
 
 
 def test_point_id_is_deterministic_uuid():
@@ -18,6 +20,11 @@ def test_ensure_collection_creates_when_absent():
     client.collection_exists.return_value = False
     QdrantStore(client, "coll").ensure_collection()
     client.create_collection.assert_called_once()
+    assert client.create_payload_index.call_count == len(_INDEXED_FIELDS)
+    indexed_fields = {
+        call.kwargs["field_name"] for call in client.create_payload_index.call_args_list
+    }
+    assert indexed_fields == set(_INDEXED_FIELDS)
 
 
 def test_ensure_collection_skips_when_present():
@@ -25,6 +32,24 @@ def test_ensure_collection_skips_when_present():
     client.collection_exists.return_value = True
     QdrantStore(client, "coll").ensure_collection()
     client.create_collection.assert_not_called()
+    assert client.create_payload_index.call_count == len(_INDEXED_FIELDS)
+    indexed_fields = {
+        call.kwargs["field_name"] for call in client.create_payload_index.call_args_list
+    }
+    assert indexed_fields == set(_INDEXED_FIELDS)
+
+
+def test_ensure_collection_creates_payload_indexes():
+    client = MagicMock()
+    client.collection_exists.return_value = True
+    QdrantStore(client, "coll").ensure_collection()
+    assert client.create_payload_index.call_count == 3
+    seen_fields = set()
+    for call in client.create_payload_index.call_args_list:
+        assert call.kwargs["collection_name"] == "coll"
+        assert call.kwargs["field_schema"] == models.PayloadSchemaType.KEYWORD
+        seen_fields.add(call.kwargs["field_name"])
+    assert seen_fields == {"content_hash", "parser_version", "chunk_config_hash"}
 
 
 def test_already_ingested_true_when_points_found():

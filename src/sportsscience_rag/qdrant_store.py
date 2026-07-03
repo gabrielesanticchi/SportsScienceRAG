@@ -11,6 +11,7 @@ from sportsscience_rag.models import Chunk
 
 NAMESPACE = uuid.UUID("6f9b1d2a-3c4e-5a6b-8c9d-0e1f2a3b4c5d")
 VECTOR_NAME = "text_embedding"
+_INDEXED_FIELDS = ("content_hash", "parser_version", "chunk_config_hash")
 
 
 def point_id(content_hash: str, chunk_index: int) -> str:
@@ -56,22 +57,34 @@ class QdrantStore:
 
         The collection is configured with a single named vector
         (``text_embedding``) using cosine distance. If the collection already
-        exists, this method is a no-op.
+        exists, collection creation is a no-op.
+
+        Regardless of whether the collection was just created or already
+        existed, this also ensures a KEYWORD payload index exists on each
+        field used by ``already_ingested``'s filter (``content_hash``,
+        ``parser_version``, ``chunk_config_hash``). Qdrant Cloud rejects
+        filtered ``count``/``search`` calls with HTTP 400 when the filtered
+        fields lack a payload index, so the index must be created here.
 
         Returns:
             None.
         """
-        if self._client.collection_exists(self._collection):
-            return
-        self._client.create_collection(
-            collection_name=self._collection,
-            vectors_config={
-                VECTOR_NAME: models.VectorParams(
-                    size=self._dimension,
-                    distance=models.Distance.COSINE,
-                )
-            },
-        )
+        if not self._client.collection_exists(self._collection):
+            self._client.create_collection(
+                collection_name=self._collection,
+                vectors_config={
+                    VECTOR_NAME: models.VectorParams(
+                        size=self._dimension,
+                        distance=models.Distance.COSINE,
+                    )
+                },
+            )
+        for field in _INDEXED_FIELDS:
+            self._client.create_payload_index(
+                collection_name=self._collection,
+                field_name=field,
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
 
     def _match_filter(
         self, content_hash: str, parser_version: str, chunk_config_hash: str
