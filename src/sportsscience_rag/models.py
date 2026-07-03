@@ -43,7 +43,8 @@ class Chunk:
         index: Sequence number of the chunk within the document.
         text: Chunk content text.
         section_path: Hierarchical section path (e.g., "# Section > ## Subsection").
-        page_numbers: Tuple of zero-indexed page numbers where this chunk appears.
+        page_numbers: Tuple of 1-indexed page numbers (Docling page numbering)
+            where this chunk appears; empty when no page match is found.
     """
     index: int
     text: str
