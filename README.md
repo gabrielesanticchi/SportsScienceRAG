@@ -24,6 +24,36 @@ comes from content-hash-derived point IDs plus a skip check on
 already-ingested files. Visual (ColPali/Qwen-VL) indexing is **seeded** — page
 renders live in S3 — but not built; see `visual_index.py` for the extension point.
 
+## Workflow
+
+```mermaid
+flowchart TD
+    S3[("S3 bucket<br/>scientific-paper PDFs")] -->|list &amp; fetch bytes| SRC["S3Source"]
+
+    subgraph PIPE["IngestionPipeline — one document at a time, per-doc try/except"]
+        direction TB
+        SRC --> HASH["content_hash<br/>sha256(bytes)"]
+        HASH -->|new| PARSE["DoclingParser<br/>(OCR off)"]
+        PARSE -->|"markdown + page_texts"| CHUNK["SectionChunker<br/>heading split + 256-tok guard"]
+        PARSE -->|"page renders (150 DPI)"| REND["RenderStore"]
+        CHUNK -->|"Chunk[]"| EMB["TextEmbedder<br/>FastEmbed MiniLM 384-d"]
+        CHUNK --> STORE["QdrantStore"]
+        EMB -->|"client-side vectors"| STORE
+    end
+
+    HASH -->|already ingested| SKIP([skipped])
+    PARSE -->|empty text layer| QUAR([quarantined])
+    REND -->|idempotent PNG upload| DERIVED[("S3 derived/&lt;hash&gt;/<br/>screenshots/page-N.png")]
+    STORE -->|"1 point/chunk · uuid5 IDs"| QDR[("Qdrant collection<br/>text_embedding · 384 · cosine")]
+    DERIVED -.->|future job, not built| VIS["VisualIndexPlaceholder<br/>(ColPali / Qwen-VL)"]
+    PIPE -.->|per-document events| LOG[["JsonlLogger<br/>source · stage · status · n_chunks"]]
+```
+
+Any per-document failure (corrupt PDF, empty text, parse/embed/upsert error) is
+recorded as a `QuarantineEntry` and the batch continues. Re-running is a no-op
+for documents already ingested under the same `(content_hash, parser_version,
+chunk_config_hash)`.
+
 ## Setup
 
 ```bash
@@ -32,8 +62,19 @@ uv pip install -e ".[dev]"       # deps incl. docling, fastembed, qdrant-client
 cp .env.example .env             # fill in AWS + Qdrant Cloud values
 ```
 
-Required `.env` keys: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`,
-`S3_BUCKET`, `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`.
+### Environment variables
+
+Generated from `.env.example`:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AWS_ACCESS_KEY_ID` | Yes | AWS credentials for S3 access |
+| `AWS_SECRET_ACCESS_KEY` | Yes | AWS credentials for S3 access |
+| `AWS_REGION` | Yes | S3 bucket region (e.g. `eu-west-1`) |
+| `S3_BUCKET` | Yes | Source PDFs **and** destination for derived page renders |
+| `QDRANT_URL` | Yes | Qdrant Cloud cluster endpoint |
+| `QDRANT_API_KEY` | Yes | Qdrant Cloud API key |
+| `QDRANT_COLLECTION` | No | Default collection name (default `sport-science-documents`; overridable with `--collection`) |
 
 ## Run
 
@@ -70,23 +111,68 @@ HF_HUB_OFFLINE=1 pytest -m integration   # loads the embedding model + parses a 
 pytest --cov=sportsscience_rag --cov-report=term-missing
 ```
 
-## Layout
+## Classes
+
+One responsibility per module; frozen dataclasses, type hints, Google-style
+docstrings throughout.
+
+| Module | Public API | Responsibility |
+|--------|-----------|----------------|
+| `config.py` | `IngestionConfig` (frozen) · `.from_env()` · `.chunk_config_hash` | Env-driven, validated configuration; derives the chunk-config hash |
+| `models.py` | `RawPdf` · `PageRender` · `Chunk` · `ParsedDocument` · `QuarantineEntry` · `IngestOutcome` | Immutable data structures passed between stages |
+| `hashing.py` | `content_hash()` · `chunk_config_hash()` | SHA-256 content hash + short chunk-config hash |
+| `s3_source.py` | `S3Source` · `parse_s3_url()` | List and fetch `.pdf` objects under S3 prefixes |
+| `parser.py` | `DoclingParser` · `PARSER_VERSION` | PDF bytes → markdown + 150-DPI page renders + per-page text (OCR off, empty-text triage) |
+| `chunker.py` | `SectionChunker` | Heading-aware split (`#/##/###`) → 256-token MiniLM-tokenizer guard; tables intact; absolute `section_path`; best-effort `page_numbers` |
+| `embedder.py` | `TextEmbedder` | Local FastEmbed `all-MiniLM-L6-v2`, 384-d client-side vectors |
+| `persistence.py` | `RenderStore` | Idempotent S3 upload of page PNGs to the derived prefix |
+| `qdrant_store.py` | `QdrantStore` · `point_id()` · `NAMESPACE` · `VECTOR_NAME` | Collection + keyword payload indexes; `uuid5` IDs; skip-if-present; upsert |
+| `logging_setup.py` | `JsonlLogger` | Structured per-document JSONL events |
+| `pipeline.py` | `IngestionPipeline` · `IngestionResult` | Orchestration, per-document quarantine, resumability |
+| `visual_index.py` | `VisualIndexPlaceholder` | Dormant ColPali/Qwen-VL extension point (raises `NotImplementedError`) |
+| `cli.py` | `build_arg_parser()` · `main()` | argparse surface + pipeline wiring |
+
+## Repository structure
 
 ```
-src/sportsscience_rag/
-  config.py         IngestionConfig (env-driven, validated) + chunk_config_hash
-  models.py         frozen dataclasses (RawPdf, PageRender, Chunk, ParsedDocument, …)
-  hashing.py        sha256 content hash + chunk-config hash
-  s3_source.py      S3Source — list/fetch PDFs
-  parser.py         DoclingParser — markdown + renders + page_texts (OCR off)
-  chunker.py        SectionChunker — heading split + token size guard
-  embedder.py       TextEmbedder — FastEmbed MiniLM (384-d)
-  persistence.py    RenderStore — idempotent S3 page-render upload
-  qdrant_store.py   QdrantStore — collection, uuid5 IDs, skip-if-present, upsert
-  logging_setup.py  JsonlLogger — structured per-document JSONL events
-  pipeline.py       IngestionPipeline — orchestration, quarantine, resumability
-  visual_index.py   dormant ColPali/Qwen-VL extension point (not built)
-  cli.py            argparse surface + wiring
-  __main__.py       python -m sportsscience_rag
-tools/bulk_download_papers.py   paper-acquisition helper (separate concern)
+SportsScienceRAG/
+├── src/sportsscience_rag/       # the ingestion package (editable install)
+│   ├── __init__.py              # PACKAGE_VERSION
+│   ├── __main__.py              # python -m sportsscience_rag → cli.main()
+│   ├── config.py                # IngestionConfig
+│   ├── models.py                # frozen dataclasses
+│   ├── hashing.py               # content_hash / chunk_config_hash
+│   ├── s3_source.py             # S3Source
+│   ├── parser.py                # DoclingParser
+│   ├── chunker.py               # SectionChunker
+│   ├── embedder.py              # TextEmbedder
+│   ├── persistence.py           # RenderStore
+│   ├── qdrant_store.py          # QdrantStore
+│   ├── logging_setup.py         # JsonlLogger
+│   ├── pipeline.py              # IngestionPipeline
+│   ├── visual_index.py          # ColPali/Qwen-VL seed (not built)
+│   └── cli.py                   # CLI + wiring
+├── tests/                       # pytest suite (unit + `integration`-marked)
+├── tools/bulk_download_papers.py# paper-acquisition helper (separate concern)
+├── assets/                      # sample PDFs for local/integration testing
+├── examples/                    # Qdrant reference notebooks
+├── docs/superpowers/            # design spec + implementation plan
+├── pyproject.toml               # deps + editable install + pytest config
+├── .env.example                 # environment variable template
+└── README.md
 ```
+
+## Dependencies
+
+Generated from `pyproject.toml`:
+
+| Package | Purpose |
+|---------|---------|
+| `docling` | Local, layout-aware PDF parsing + page rendering |
+| `fastembed` | Local MiniLM dense embeddings (384-d) |
+| `qdrant-client` | Vector collection management + upsert |
+| `boto3` | S3 listing, fetching, render upload |
+| `langchain-text-splitters` | Markdown-header + recursive chunk splitting |
+| `Pillow` | Page-render image encoding (PNG) |
+| `python-dotenv` | `.env` loading |
+| `pytest`, `pytest-cov` *(dev)* | Test suite + coverage |
