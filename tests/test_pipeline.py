@@ -43,6 +43,40 @@ def test_happy_path_upserts_and_reports_done():
     d["store"].upsert.assert_called_once()
 
 
+def test_text_store_receives_markdown_and_page_texts():
+    text_store = MagicMock()
+    p, d = _pipeline(text_store=text_store)
+    d["source"].list_pdfs.return_value = [("k.pdf", "s3://bkt/k.pdf")]
+    d["source"].fetch.return_value = b"PDF"
+    d["store"].already_ingested.return_value = False
+    parsed = ParsedDocument("# H\n\ntext", 1, (), False, ((1, "page one text"),))
+    d["parser"].parse.return_value = parsed
+    d["chunker"].chunk.return_value = [Chunk(0, "text", "H", ())]
+    d["embedder"].embed.return_value = [[0.0] * 384]
+    d["store"].upsert.return_value = 1
+
+    result = p.run([""])
+    assert result.outcomes[0].status == "done"
+    text_store.upload.assert_called_once_with(
+        result.outcomes[0].content_hash, "# H\n\ntext", ((1, "page one text"),)
+    )
+
+
+def test_text_store_optional_when_absent():
+    # Default pipeline has no text_store; run must still complete cleanly.
+    p, d = _pipeline()
+    d["source"].list_pdfs.return_value = [("k.pdf", "s3://bkt/k.pdf")]
+    d["source"].fetch.return_value = b"PDF"
+    d["store"].already_ingested.return_value = False
+    d["parser"].parse.return_value = ParsedDocument("# H\n\nt", 1, (), False, ())
+    d["chunker"].chunk.return_value = [Chunk(0, "t", "H", ())]
+    d["embedder"].embed.return_value = [[0.0] * 384]
+    d["store"].upsert.return_value = 1
+
+    result = p.run([""])
+    assert result.outcomes[0].status == "done"
+
+
 def test_skips_already_ingested():
     p, d = _pipeline()
     d["source"].list_pdfs.return_value = [("k.pdf", "s3://bkt/k.pdf")]

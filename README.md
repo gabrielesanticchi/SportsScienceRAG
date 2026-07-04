@@ -9,7 +9,10 @@ a modular, class-oriented package under `src/sportsscience_rag/`.
 `S3Source` (list/fetch `.pdf` objects) → `DoclingParser` (layout-aware markdown +
 150-DPI per-page renders, OCR off, empty-text triage, per-page text for page
 mapping) → `RenderStore` (idempotent page-PNG upload to
-`s3://<bucket>/derived/<content_hash>/screenshots/page-<N>.png`) → `SectionChunker`
+`s3://<bucket>/derived/<content_hash>/screenshots/page-<N>.png`) → `TextStore`
+(idempotent upload of the parsed markdown and per-page text to
+`s3://<bucket>/derived/<content_hash>/text/document.md` and `.../text/page-<N>.txt`
+for inspection) → `SectionChunker`
 (heading-aware split on `#/##/###` → 256-token size guard using the MiniLM
 tokenizer, tables kept intact, absolute `section_path` provenance, best-effort
 `page_numbers`) → `TextEmbedder` (local FastEmbed `all-MiniLM-L6-v2`, 384-dim,
@@ -36,6 +39,7 @@ flowchart TD
         HASH -->|new| PARSE["DoclingParser<br/>(OCR off)"]
         PARSE -->|"markdown + page_texts"| CHUNK["SectionChunker<br/>heading split + 256-tok guard"]
         PARSE -->|"page renders (150 DPI)"| REND["RenderStore"]
+        PARSE -->|"markdown + page_texts"| TXT["TextStore"]
         CHUNK -->|"Chunk[]"| EMB["TextEmbedder<br/>FastEmbed MiniLM 384-d"]
         CHUNK --> STORE["QdrantStore"]
         EMB -->|"client-side vectors"| STORE
@@ -44,6 +48,7 @@ flowchart TD
     HASH -->|already ingested| SKIP([skipped])
     PARSE -->|empty text layer| QUAR([quarantined])
     REND -->|idempotent PNG upload| DERIVED[("S3 derived/&lt;hash&gt;/<br/>screenshots/page-N.png")]
+    TXT -->|idempotent text upload| DERIVEDTXT[("S3 derived/&lt;hash&gt;/text/<br/>document.md · page-N.txt")]
     STORE -->|"1 point/chunk · uuid5 IDs"| QDR[("Qdrant collection<br/>text_embedding · 384 · cosine")]
     DERIVED -.->|future job, not built| VIS["VisualIndexPlaceholder<br/>(ColPali / Qwen-VL)"]
     PIPE -.->|per-document events| LOG[["JsonlLogger<br/>source · stage · status · n_chunks"]]
@@ -125,7 +130,7 @@ docstrings throughout.
 | `parser.py` | `DoclingParser` · `PARSER_VERSION` | PDF bytes → markdown + 150-DPI page renders + per-page text (OCR off, empty-text triage) |
 | `chunker.py` | `SectionChunker` | Heading-aware split (`#/##/###`) → 256-token MiniLM-tokenizer guard; tables intact; absolute `section_path`; best-effort `page_numbers` |
 | `embedder.py` | `TextEmbedder` | Local FastEmbed `all-MiniLM-L6-v2`, 384-d client-side vectors |
-| `persistence.py` | `RenderStore` | Idempotent S3 upload of page PNGs to the derived prefix |
+| `persistence.py` | `RenderStore` · `TextStore` | Idempotent S3 upload of page PNGs (`screenshots/`) and parsed markdown + per-page text (`text/`) to the derived prefix |
 | `qdrant_store.py` | `QdrantStore` · `point_id()` · `NAMESPACE` · `VECTOR_NAME` | Collection + keyword payload indexes; `uuid5` IDs; skip-if-present; upsert |
 | `logging_setup.py` | `JsonlLogger` | Structured per-document JSONL events |
 | `pipeline.py` | `IngestionPipeline` · `IngestionResult` | Orchestration, per-document quarantine, resumability |
@@ -146,7 +151,7 @@ SportsScienceRAG/
 │   ├── parser.py                # DoclingParser
 │   ├── chunker.py               # SectionChunker
 │   ├── embedder.py              # TextEmbedder
-│   ├── persistence.py           # RenderStore
+│   ├── persistence.py           # RenderStore + TextStore
 │   ├── qdrant_store.py          # QdrantStore
 │   ├── logging_setup.py         # JsonlLogger
 │   ├── pipeline.py              # IngestionPipeline

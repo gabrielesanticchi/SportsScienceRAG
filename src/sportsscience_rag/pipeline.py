@@ -48,6 +48,7 @@ class IngestionPipeline:
         store,
         logger,
         parser_version: str,
+        text_store=None,
     ) -> None:
         """Initializes the pipeline with its collaborators.
 
@@ -64,6 +65,11 @@ class IngestionPipeline:
                 (e.g. ``TextEmbedder``).
             render_store: Object exposing
                 ``upload(content_hash, renders)`` (e.g. ``RenderStore``).
+            text_store: Optional object exposing
+                ``upload(content_hash, markdown, page_texts)`` (e.g.
+                ``TextStore``) that persists the parsed markdown and per-page
+                text to S3 for inspection. If ``None``, no text artifacts are
+                written.
             store: Vector store exposing ``ensure_collection()``,
                 ``already_ingested(content_hash, parser_version,
                 chunk_config_hash) -> bool``, and ``upsert(...) -> int``
@@ -79,6 +85,7 @@ class IngestionPipeline:
         self._chunker = chunker
         self._embedder = embedder
         self._render_store = render_store
+        self._text_store = text_store
         self._store = store
         self._logger = logger
         self._parser_version = parser_version
@@ -176,6 +183,10 @@ class IngestionPipeline:
 
             stage = "render-upload"
             self._render_store.upload(chash, parsed.renders)
+
+            if self._text_store is not None:
+                stage = "text-upload"
+                self._text_store.upload(chash, parsed.markdown, parsed.page_texts)
 
             stage = "chunk"
             chunks = self._chunker.chunk(parsed.markdown, parsed.page_texts)

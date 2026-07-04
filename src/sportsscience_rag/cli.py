@@ -17,7 +17,7 @@ from sportsscience_rag.config import IngestionConfig
 from sportsscience_rag.embedder import TextEmbedder
 from sportsscience_rag.logging_setup import JsonlLogger
 from sportsscience_rag.parser import PARSER_VERSION, DoclingParser
-from sportsscience_rag.persistence import RenderStore
+from sportsscience_rag.persistence import RenderStore, TextStore
 from sportsscience_rag.pipeline import IngestionPipeline
 from sportsscience_rag.qdrant_store import QdrantStore
 from sportsscience_rag.s3_source import S3Source
@@ -107,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         chunker=SectionChunker(config),
         embedder=TextEmbedder(),
         render_store=RenderStore(s3_client, config.s3_bucket, args.derived_prefix),
+        text_store=TextStore(s3_client, config.s3_bucket, args.derived_prefix),
         store=QdrantStore(qdrant_client, collection),
         logger=JsonlLogger(),
         parser_version=PARSER_VERSION,
