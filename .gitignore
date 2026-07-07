@@ -27,6 +27,9 @@ out.json
 
 # Source PDF papers (copyrighted — keep local only; extracted text lives in assets/sports_science_documents.py)
 assets/*.pdf
+papers/*.pdf
 
 # OS
 .DS_Store
+examples/*
+papers/*

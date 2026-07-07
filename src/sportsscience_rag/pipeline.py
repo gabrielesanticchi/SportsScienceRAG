@@ -174,7 +174,7 @@ class IngestionPipeline:
                 return self._done(source_url, chash, "skipped", 0, start, "skip-check"), None
 
             stage = "parse"
-            parsed = self._parser.parse(data, key)
+            parsed = self._parser.parse(data, key) # Containers .page_texts (text per page) and .renders (images per page)
             if parsed.is_empty:
                 return (
                     self._done(source_url, chash, "quarantined", 0, start, "parse"),
