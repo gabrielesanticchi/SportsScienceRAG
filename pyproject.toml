@@ -1,0 +1,29 @@
+[project]
+name = "sportsscience-rag"
+version = "0.1.0"
+description = "S3 -> Docling -> Qdrant ingestion pipeline for sports-science papers"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.35",
+    "python-dotenv>=1.0",
+    "docling>=2.0",
+    "langchain-text-splitters>=0.3",
+    "fastembed>=0.4",
+    "qdrant-client>=1.12",
+    "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: touches models/network/heavy deps (deselect with -m 'not integration')",
+]

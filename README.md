@@ -1,116 +1,183 @@
-# Sports Science Semantic Search Engine
+# SportsScience RAG — S3 → Docling → Qdrant ingestion
 
-A semantic search engine over a corpus of 27 sports-science research papers
-(PDFs in `assets/`). It extracts text and metadata from each PDF, chunks the
-text using **three strategies**, embeds the chunks with Sentence Transformers,
-stores them in **Qdrant** (one named vector per strategy), and lets you search
-and compare the strategies side by side.
+Document-level, chunk-based ingestion of scientific-paper PDFs from AWS S3 into
+a Qdrant vector collection, with per-page renders persisted back to S3. Built as
+a modular, class-oriented package under `src/sportsscience_rag/`.
 
-## Architecture
+## Pipeline stages
 
-The code lives in the `sports_science_search/` package — one responsibility per
-module:
+`S3Source` (list/fetch `.pdf` objects) → `DoclingParser` (layout-aware markdown +
+150-DPI per-page renders, OCR off, empty-text triage, per-page text for page
+mapping) → `RenderStore` (idempotent page-PNG upload to
+`s3://<bucket>/derived/<content_hash>/screenshots/page-<N>.png`) → `TextStore`
+(idempotent upload of the parsed markdown and per-page text to
+`s3://<bucket>/derived/<content_hash>/text/document.md` and `.../text/page-<N>.txt`
+for inspection) → `SectionChunker`
+(heading-aware split on `#/##/###` → 256-token size guard using the MiniLM
+tokenizer, tables kept intact, absolute `section_path` provenance, best-effort
+`page_numbers`) → `TextEmbedder` (local FastEmbed `all-MiniLM-L6-v2`, 384-dim,
+client-side vectors) → `QdrantStore` (one point per chunk, `uuid5(content_hash:chunk_index)`
+IDs, skip-if-present).
 
-| Module | Responsibility |
-|--------|----------------|
-| `constants.py` | Section patterns, chunking params, Qdrant/embedding config |
-| `exceptions.py` | `PDFExtractionError`, `SectionDetectionError`, `VectorUploadError`, `PDFProcessingError` |
-| `models.py` | Immutable dataclasses: `Paper`, `PaperChunk`, `SearchResult` |
-| `pdf_extractor.py` | `PDFExtractor` — PyMuPDF text extraction, section detection, metadata |
-| `text_chunker.py` | `TextChunker` — semantic / paragraph / fixed-size chunking |
-| `vector_store.py` | `VectorStore` — Qdrant collection, upload, search, stats |
-| `search_engine.py` | `SemanticSearchEngine` — orchestrates the full pipeline |
+`IngestionPipeline` iterates **documents** one at a time with per-document
+try/except: any failure (corrupt PDF, empty text layer, parse/embed/upsert error)
+is recorded as a structured quarantine entry and the batch continues. Idempotency
+comes from content-hash-derived point IDs plus a skip check on
+`(content_hash, parser_version, chunk_config_hash)`, so re-running is a no-op for
+already-ingested files. Visual (ColPali/Qwen-VL) indexing is **seeded** — page
+renders live in S3 — but not built; see `visual_index.py` for the extension point.
 
+## Workflow
+
+```mermaid
+flowchart TD
+    S3[("S3 bucket<br/>scientific-paper PDFs")] -->|list &amp; fetch bytes| SRC["S3Source"]
+
+    subgraph PIPE["IngestionPipeline — one document at a time, per-doc try/except"]
+        direction TB
+        SRC --> HASH["content_hash<br/>sha256(bytes)"]
+        HASH -->|new| PARSE["DoclingParser<br/>(OCR off)"]
+        PARSE -->|"markdown + page_texts"| CHUNK["SectionChunker<br/>heading split + 256-tok guard"]
+        PARSE -->|"page renders (150 DPI)"| REND["RenderStore"]
+        PARSE -->|"markdown + page_texts"| TXT["TextStore"]
+        CHUNK -->|"Chunk[]"| EMB["TextEmbedder<br/>FastEmbed MiniLM 384-d"]
+        CHUNK --> STORE["QdrantStore"]
+        EMB -->|"client-side vectors"| STORE
+    end
+
+    HASH -->|already ingested| SKIP([skipped])
+    PARSE -->|empty text layer| QUAR([quarantined])
+    REND -->|idempotent PNG upload| DERIVED[("S3 derived/&lt;hash&gt;/<br/>screenshots/page-N.png")]
+    TXT -->|idempotent text upload| DERIVEDTXT[("S3 derived/&lt;hash&gt;/text/<br/>document.md · page-N.txt")]
+    STORE -->|"1 point/chunk · uuid5 IDs"| QDR[("Qdrant collection<br/>text_embedding · 384 · cosine")]
+    DERIVED -.->|future job, not built| VIS["VisualIndexPlaceholder<br/>(ColPali / Qwen-VL)"]
+    PIPE -.->|per-document events| LOG[["JsonlLogger<br/>source · stage · status · n_chunks"]]
 ```
-PDF -> PDFExtractor -> Paper
-Paper -> TextChunker -> [PaperChunk] (semantic + paragraph + fixed)
-[PaperChunk] -> VectorStore.upload_chunks -> Qdrant (named vectors)
-query -> VectorStore.search(strategy) -> [SearchResult]
-```
 
-### Chunking strategies
-
-| Strategy | How it splits | Named vector |
-|----------|---------------|--------------|
-| `semantic` | llama-index `SemanticSplitterNodeParser` (buffer=1, threshold=95) | `semantic` |
-| `paragraph` | double-newline paragraphs (falls back to single newline) | `paragraph` |
-| `fixed` | 200-word windows with 50-word overlap | `fixed` |
-
-All three use `all-MiniLM-L6-v2` (384-dim, cosine distance).
+Any per-document failure (corrupt PDF, empty text, parse/embed/upsert error) is
+recorded as a `QuarantineEntry` and the batch continues. Re-running is a no-op
+for documents already ingested under the same `(content_hash, parser_version,
+chunk_config_hash)`.
 
 ## Setup
 
 ```bash
-source .venv/bin/activate          # project virtualenv
-# dependencies are already installed; for a fresh env use:
-#   uv pip install pymupdf sentence-transformers llama-index \
-#       llama-index-embeddings-huggingface qdrant-client python-dotenv
+source .venv/bin/activate
+uv pip install -e ".[dev]"       # deps incl. docling, fastembed, qdrant-client
+cp .env.example .env             # fill in AWS + Qdrant Cloud values
 ```
 
-Create a `.env` with your Qdrant Cloud credentials (already present in this repo):
+### Environment variables
 
-```
-QDRANT_URL=https://<your-cluster>.cloud.qdrant.io
-QDRANT_API_KEY=<your-key>
-```
+Generated from `.env.example`:
 
-## Usage (CLI)
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AWS_ACCESS_KEY_ID` | Yes | AWS credentials for S3 access |
+| `AWS_SECRET_ACCESS_KEY` | Yes | AWS credentials for S3 access |
+| `AWS_REGION` | Yes | S3 bucket region (e.g. `eu-west-1`) |
+| `S3_BUCKET` | Yes | Source PDFs **and** destination for derived page renders |
+| `QDRANT_URL` | Yes | Qdrant Cloud cluster endpoint |
+| `QDRANT_API_KEY` | Yes | Qdrant Cloud API key |
+| `QDRANT_COLLECTION` | No | Default collection name (default `sport-science-documents`; overridable with `--collection`) |
 
-The runnable entry point is `examples/run_search_demo.py`.
+## Run
 
 ```bash
-# 1. One-time ingest of all 27 PDFs into Qdrant Cloud (recreate from scratch)
-PYTHONPATH=. python examples/run_search_demo.py ingest --recreate
+# List PDFs only — no writes
+python -m sportsscience_rag --dry-run --limit 5
 
-# 2. Query — searches all three strategies and prints a comparison
-PYTHONPATH=. python examples/run_search_demo.py search "high intensity interval training"
-PYTHONPATH=. python examples/run_search_demo.py search "GPS tracking accuracy" --limit 5 --section Methods
+# Ingest the first 2 PDFs under a prefix into a named collection
+python -m sportsscience_rag --prefix papers/ --limit 2 \
+    --collection my-test --quarantine-report quarantine.json
 
-# 3. Inspect the collection
-PYTHONPATH=. python examples/run_search_demo.py stats
-PYTHONPATH=. python examples/run_search_demo.py analyze
-
-# Export a search result to JSON
-PYTHONPATH=. python examples/run_search_demo.py search "muscle fatigue" --export out.json
+# Full batch (all prefixes / bucket root)
+python -m sportsscience_rag --prefix papers/
 ```
 
-### Local, no-cloud run
+CLI flags: `--prefix` (repeatable), `--collection`, `--limit N`,
+`--quarantine-report PATH`, `--derived-prefix` (default `derived/`), `--dry-run`,
+`-v/--verbose`.
 
-For a fully self-contained run on an in-memory Qdrant (ingest + one search in a
-single process — nothing is persisted):
+### Operational notes
+
+- **Docling is CPU/GPU-bound** (~15–40s per PDF on Apple MPS). The full ~1000-paper
+  corpus is a multi-hour, one-shot batch — run it detached (`nohup`/`tmux`).
+- Run **one convert at a time** (the pipeline already does). Concurrent Docling
+  converts can deadlock on Hugging Face model locks.
+- Once Docling/FastEmbed models are cached, set `HF_HUB_OFFLINE=1` to skip HF
+  network round-trips (faster, avoids rate-limit stalls).
+
+## Test
 
 ```bash
-PYTHONPATH=. python examples/run_search_demo.py demo --query "muscle fatigue"
+pytest -m "not integration"      # fast unit tests (mocked S3/Qdrant, fake tokenizer)
+HF_HUB_OFFLINE=1 pytest -m integration   # loads the embedding model + parses a real PDF
+pytest --cov=sportsscience_rag --cov-report=term-missing
 ```
 
-## Usage (library)
+## Classes
 
-```python
-from pathlib import Path
-from qdrant_client import QdrantClient
-from sports_science_search import SemanticSearchEngine
+One responsibility per module; frozen dataclasses, type hints, Google-style
+docstrings throughout.
 
-engine = SemanticSearchEngine(
-    pdf_dir=Path("assets"),
-    qdrant_client=QdrantClient(":memory:"),   # or QdrantClient(url=..., api_key=...)
-)
-engine.process_papers(recreate_collection=True)
+| Module | Public API | Responsibility |
+|--------|-----------|----------------|
+| `config.py` | `IngestionConfig` (frozen) · `.from_env()` · `.chunk_config_hash` | Env-driven, validated configuration; derives the chunk-config hash |
+| `models.py` | `RawPdf` · `PageRender` · `Chunk` · `ParsedDocument` · `QuarantineEntry` · `IngestOutcome` | Immutable data structures passed between stages |
+| `hashing.py` | `content_hash()` · `chunk_config_hash()` | SHA-256 content hash + short chunk-config hash |
+| `s3_source.py` | `S3Source` · `parse_s3_url()` | List and fetch `.pdf` objects under S3 prefixes |
+| `parser.py` | `DoclingParser` · `PARSER_VERSION` | PDF bytes → markdown + 150-DPI page renders + per-page text (OCR off, empty-text triage) |
+| `chunker.py` | `SectionChunker` | Heading-aware split (`#/##/###`) → 256-token MiniLM-tokenizer guard; tables intact; absolute `section_path`; best-effort `page_numbers` |
+| `embedder.py` | `TextEmbedder` | Local FastEmbed `all-MiniLM-L6-v2`, 384-d client-side vectors |
+| `persistence.py` | `RenderStore` · `TextStore` | Idempotent S3 upload of page PNGs (`screenshots/`) and parsed markdown + per-page text (`text/`) to the derived prefix |
+| `qdrant_store.py` | `QdrantStore` · `point_id()` · `NAMESPACE` · `VECTOR_NAME` | Collection + keyword payload indexes; `uuid5` IDs; skip-if-present; upsert |
+| `logging_setup.py` | `JsonlLogger` | Structured per-document JSONL events |
+| `pipeline.py` | `IngestionPipeline` · `IngestionResult` | Orchestration, per-document quarantine, resumability |
+| `visual_index.py` | `VisualIndexPlaceholder` | Dormant ColPali/Qwen-VL extension point (raises `NotImplementedError`) |
+| `cli.py` | `build_arg_parser()` · `main()` | argparse surface + pipeline wiring |
 
-results = engine.search_and_compare("acceleration load monitoring", limit=3)
-print(results["analysis"]["top_strategy"])
+## Repository structure
+
+```
+SportsScienceRAG/
+├── src/sportsscience_rag/       # the ingestion package (editable install)
+│   ├── __init__.py              # PACKAGE_VERSION
+│   ├── __main__.py              # python -m sportsscience_rag → cli.main()
+│   ├── config.py                # IngestionConfig
+│   ├── models.py                # frozen dataclasses
+│   ├── hashing.py               # content_hash / chunk_config_hash
+│   ├── s3_source.py             # S3Source
+│   ├── parser.py                # DoclingParser
+│   ├── chunker.py               # SectionChunker
+│   ├── embedder.py              # TextEmbedder
+│   ├── persistence.py           # RenderStore + TextStore
+│   ├── qdrant_store.py          # QdrantStore
+│   ├── logging_setup.py         # JsonlLogger
+│   ├── pipeline.py              # IngestionPipeline
+│   ├── visual_index.py          # ColPali/Qwen-VL seed (not built)
+│   └── cli.py                   # CLI + wiring
+├── tests/                       # pytest suite (unit + `integration`-marked)
+├── tools/bulk_download_papers.py# paper-acquisition helper (separate concern)
+├── assets/                      # sample PDFs for local/integration testing
+├── examples/                    # Qdrant reference notebooks
+├── docs/superpowers/            # design spec + implementation plan
+├── pyproject.toml               # deps + editable install + pytest config
+├── .env.example                 # environment variable template
+└── README.md
 ```
 
-## Notes
+## Dependencies
 
-- The first run downloads the `all-MiniLM-L6-v2` model (~200 MB) and caches it
-  in `~/.cache/huggingface`.
-- Section detection auto-detects via regex; papers that fail auto-detection can
-  be supplied a manual mapping JSON (`manual_mappings_path`).
-- The legacy single-file module `12_handson_sportscience_semantic_engine.py` is
-  now a backwards-compatibility shim that re-exports the package.
+Generated from `pyproject.toml`:
 
-## Known limitations / technical debt
-
-- `VectorStore.upload_chunks` encodes chunks one at a time and uses sequential
-  integer point IDs — batch encoding and UUID IDs are pending optimizations.
-- `avg_chunk_size` in the analysis output is an approximation.
+| Package | Purpose |
+|---------|---------|
+| `docling` | Local, layout-aware PDF parsing + page rendering |
+| `fastembed` | Local MiniLM dense embeddings (384-d) |
+| `qdrant-client` | Vector collection management + upsert |
+| `boto3` | S3 listing, fetching, render upload |
+| `langchain-text-splitters` | Markdown-header + recursive chunk splitting |
+| `Pillow` | Page-render image encoding (PNG) |
+| `python-dotenv` | `.env` loading |
+| `pytest`, `pytest-cov` *(dev)* | Test suite + coverage |

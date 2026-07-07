@@ -1,0 +1,101 @@
+{
+  // Debug configs for the S3 -> Docling -> Qdrant ingestion pipeline.
+  //
+  // How to step through the pipeline one stage at a time:
+  //   1. Open src/sportsscience_rag/pipeline.py and set a breakpoint on the
+  //      first line of IngestionPipeline._process_one (the `start = ...` line).
+  //      Each stage is a labelled block: fetch -> hash -> skip-check -> parse
+  //      -> render-upload -> text-upload -> chunk -> embed -> upsert.
+  //   2. Pick "Ingest: step through ONE PDF" below and press F5.
+  //   3. Use Step Over (F10) to advance stage by stage; Step Into (F11) to
+  //      descend into a collaborator (parser/chunker/embedder/store).
+  //
+  // "justMyCode": true keeps F11 inside this package (recommended for walking
+  // the pipeline). The "(into libraries)" variant sets it false so you can also
+  // step into docling / fastembed / qdrant_client internals.
+  //
+  // NOTE: the first run must be ONLINE so Docling and FastEmbed can download
+  // their models into their caches. Once cached, you can add
+  //   "env": { "HF_HUB_OFFLINE": "1" }
+  // to a config to skip HF network round-trips (faster start). Do NOT set it
+  // before the models are cached, or FastEmbed fails with "Could not load
+  // model ... from any source".
+  "version": "0.2.0",
+  "configurations": [
+  
+    {
+      "name": "Ingest: step through ONE PDF",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sportsscience_rag",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": true,
+      "envFile": "${workspaceFolder}/.env",
+      "args": [
+        "--prefix", "disalvo2007",
+        "--collection", "debug-stepthrough"
+      ]
+    },
+    {
+      "name": "Ingest: step through ONE PDF (into libraries)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sportsscience_rag",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/.env",
+      "args": [
+        "--prefix", "disalvo2007",
+        "--collection", "debug-stepthrough"
+      ]
+    },
+    {
+      "name": "Ingest: dry-run (list PDFs, no writes)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sportsscience_rag",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": true,
+      "envFile": "${workspaceFolder}/.env",
+      "args": [
+        "--dry-run",
+        "--limit", "5",
+        "--verbose"
+      ]
+    },
+    {
+      "name": "Ingest: full batch (all PDFs)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sportsscience_rag",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": true,
+      "envFile": "${workspaceFolder}/.env",
+      "args": [
+        "--collection", "sport-science-documents"
+      ]
+    },
+    {
+      "name": "Pytest: current file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false,
+      "args": [
+        "${file}",
+        "-v"
+      ]
+    }
+  ]
+}
