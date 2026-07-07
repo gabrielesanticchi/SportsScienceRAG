@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from ranx import Qrels, Run, evaluate
+
 from sportsscience_rag.retriever import RetrievedChunk
 
 METRICS = ["mrr", "recall@5", "recall@10", "hit_rate@1", "ndcg@10"]
@@ -78,3 +80,76 @@ def build_run_dict(
                 best[filename] = hit.score
         run[query] = best
     return run
+
+
+@dataclass(frozen=True)
+class EvalReport:
+    """Aggregated evaluation results.
+
+    Attributes:
+        metrics: Map of ranx metric name -> macro-averaged score.
+        per_query: One row per query with best-relevant-paper rank diagnostics.
+        n_queries: Number of queries evaluated.
+    """
+
+    metrics: dict[str, float]
+    per_query: list[dict]
+    n_queries: int
+
+
+def _best_relevant_rank(
+    ranked_filenames: list[str], relevant: dict[str, int]
+) -> int | None:
+    """Return the 1-indexed rank of the highest-ranked relevant paper, or None.
+
+    Args:
+        ranked_filenames: Retrieved filenames ordered by descending score.
+        relevant: Map of relevant filename -> grade for this query.
+
+    Returns:
+        The 1-indexed rank of the first relevant paper, or ``None`` if none of
+        the relevant papers were retrieved.
+    """
+    for rank, filename in enumerate(ranked_filenames, start=1):
+        if filename in relevant:
+            return rank
+    return None
+
+
+def evaluate_run(
+    qrels_dict: dict[str, dict[str, int]],
+    run_dict: dict[str, dict[str, float]],
+    queries: list[GoldQuery],
+) -> EvalReport:
+    """Score a run dict against graded qrels using ranx.
+
+    Args:
+        qrels_dict: Graded relevance judgments {query: {filename: grade}}.
+        run_dict: Retrieval results {query: {filename: score}}.
+        queries: Gold queries (used for per-query notes and rank diagnostics).
+
+    Returns:
+        An ``EvalReport`` with macro-averaged metrics and per-query rows.
+    """
+    qrels = Qrels(qrels_dict)
+    run = Run(run_dict, name="baseline")
+    scores = evaluate(qrels, run, METRICS)
+    metrics = {name: float(scores[name]) for name in METRICS}
+
+    per_query: list[dict] = []
+    for gold in queries:
+        ranked = sorted(
+            run_dict.get(gold.query, {}).items(),
+            key=lambda kv: kv[1],
+            reverse=True,
+        )
+        ranked_filenames = [filename for filename, _ in ranked]
+        best_rank = _best_relevant_rank(ranked_filenames, gold.relevant)
+        per_query.append(
+            {
+                "query": gold.query,
+                "best_rank": best_rank,
+                "notes": gold.notes,
+            }
+        )
+    return EvalReport(metrics=metrics, per_query=per_query, n_queries=len(queries))

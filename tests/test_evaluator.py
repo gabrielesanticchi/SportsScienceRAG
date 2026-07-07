@@ -53,3 +53,42 @@ def test_load_gold_skips_blank_lines(tmp_path):
     )
     queries, qrels = load_gold(p)
     assert len(queries) == 1
+
+
+from sportsscience_rag.evaluator import EvalReport, evaluate_run
+
+
+def test_evaluate_run_computes_metrics_and_per_query():
+    queries = [
+        GoldQuery(query="q1", relevant={"a.pdf": 3}, notes="known-item"),
+        GoldQuery(query="q2", relevant={"b.pdf": 3, "c.pdf": 2}, notes=""),
+    ]
+    qrels = {"q1": {"a.pdf": 3}, "q2": {"b.pdf": 3, "c.pdf": 2}}
+    # q1: a.pdf ranked 1 (perfect). q2: b.pdf ranked 2, x.pdf ranked 1 (irrelevant).
+    run = {
+        "q1": {"a.pdf": 0.9, "z.pdf": 0.4},
+        "q2": {"x.pdf": 0.8, "b.pdf": 0.7, "c.pdf": 0.3},
+    }
+    report = evaluate_run(qrels, run, queries)
+
+    assert isinstance(report, EvalReport)
+    assert report.n_queries == 2
+    # every configured metric is present and in [0, 1]
+    for name in ["mrr", "recall@5", "recall@10", "hit_rate@1", "ndcg@10"]:
+        assert name in report.metrics
+        assert 0.0 <= report.metrics[name] <= 1.0
+    # q1 got its relevant paper at rank 1; q2's best relevant paper is at rank 2
+    by_query = {row["query"]: row for row in report.per_query}
+    assert by_query["q1"]["best_rank"] == 1
+    assert by_query["q2"]["best_rank"] == 2
+    assert by_query["q1"]["notes"] == "known-item"
+
+
+def test_evaluate_run_reports_miss_as_none_rank():
+    queries = [GoldQuery(query="q1", relevant={"a.pdf": 3})]
+    qrels = {"q1": {"a.pdf": 3}}
+    run = {"q1": {"other.pdf": 0.9}}  # relevant paper not retrieved at all
+    report = evaluate_run(qrels, run, queries)
+    row = report.per_query[0]
+    assert row["best_rank"] is None
+    assert report.metrics["hit_rate@1"] == 0.0
