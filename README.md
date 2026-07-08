@@ -83,21 +83,52 @@ Generated from `.env.example`:
 
 ## Run
 
+The CLI has three subcommands: `ingest`, `search`, `eval`.
+
 ```bash
 # List PDFs only — no writes
-python -m sportsscience_rag --dry-run --limit 5
+python -m sportsscience_rag ingest --dry-run --limit 5
 
 # Ingest the first 2 PDFs under a prefix into a named collection
-python -m sportsscience_rag --prefix papers/ --limit 2 \
+python -m sportsscience_rag ingest --prefix papers/ --limit 2 \
     --collection my-test --quarantine-report quarantine.json
 
 # Full batch (all prefixes / bucket root)
-python -m sportsscience_rag --prefix papers/
+python -m sportsscience_rag ingest --prefix papers/
+
+# Search — one-shot query (prints ranked chunks)
+python -m sportsscience_rag search "high-intensity running in elite soccer" --limit 5
+
+# Search — interactive REPL (embedding model loaded once, then query per line)
+python -m sportsscience_rag search
+
+# Evaluate retrieval against the graded gold set
+python -m sportsscience_rag eval --gold eval/gold.jsonl --limit 10 --report eval/results.json
 ```
 
-CLI flags: `--prefix` (repeatable), `--collection`, `--limit N`,
+`ingest` flags: `--prefix` (repeatable), `--collection`, `--limit N`,
 `--quarantine-report PATH`, `--derived-prefix` (default `derived/`), `--dry-run`,
-`-v/--verbose`.
+`-v/--verbose`. `search` flags: positional `query` (omit for REPL), `--limit`,
+`--collection`, `--json`. `eval` flags: `--gold`, `--limit`, `--collection`,
+`--report`.
+
+## Retrieval & Evaluation
+
+Retrieval is chunk-level: `Retriever.search(query, limit)` embeds the query with
+the same FastEmbed MiniLM model used at ingestion and runs a cosine
+`query_points` against the `text_embedding` named vector, returning ranked
+`RetrievedChunk`s (score, source, page numbers, section path, text).
+
+Evaluation is document-level. `eval/gold.jsonl` holds 31 graded queries over the
+26-paper corpus (`{"query", "relevant": {filename: grade}, "notes"}`, grades 1-3
+per the rubric in `eval/README.md`). The `eval` subcommand retrieves each query,
+dedups chunks to the best-scoring chunk per paper, and scores the run with
+[`ranx`](https://github.com/AmenRa/ranx): `mrr`, `recall@5`, `recall@10`,
+`hit_rate@1`, `ndcg@10` (macro-averaged), plus a per-query best-rank breakdown.
+Install the eval extra with `uv pip install -e ".[eval]"`.
+
+Current baseline (31 queries, `limit=10`, `sport-science-documents`):
+`mrr 0.72 · recall@5 0.72 · recall@10 0.73 · hit_rate@1 0.61 · ndcg@10 0.66`.
 
 ### Operational notes
 
@@ -112,7 +143,7 @@ CLI flags: `--prefix` (repeatable), `--collection`, `--limit N`,
 
 ```bash
 pytest -m "not integration"      # fast unit tests (mocked S3/Qdrant, fake tokenizer)
-HF_HUB_OFFLINE=1 pytest -m integration   # loads the embedding model + parses a real PDF
+HF_HUB_OFFLINE=1 pytest -m integration   # loads the embedding model; hits the live collection
 pytest --cov=sportsscience_rag --cov-report=term-missing
 ```
 
@@ -130,12 +161,14 @@ docstrings throughout.
 | `parser.py` | `DoclingParser` · `PARSER_VERSION` | PDF bytes → markdown + 150-DPI page renders + per-page text (OCR off, empty-text triage) |
 | `chunker.py` | `SectionChunker` | Heading-aware split (`#/##/###`) → 256-token MiniLM-tokenizer guard; tables intact; absolute `section_path`; best-effort `page_numbers` |
 | `embedder.py` | `TextEmbedder` | Local FastEmbed `all-MiniLM-L6-v2`, 384-d client-side vectors |
+| `retriever.py` | `Retriever` · `RetrievedChunk` | Chunk-level semantic search: embed query → `query_points` → ranked `RetrievedChunk`s |
+| `evaluator.py` | `load_gold` · `build_run_dict` · `evaluate_run` · `GoldQuery` · `EvalReport` | Graded document-level IR evaluation via ranx (paper-dedup by max chunk score) |
 | `persistence.py` | `RenderStore` · `TextStore` | Idempotent S3 upload of page PNGs (`screenshots/`) and parsed markdown + per-page text (`text/`) to the derived prefix |
 | `qdrant_store.py` | `QdrantStore` · `point_id()` · `NAMESPACE` · `VECTOR_NAME` | Collection + keyword payload indexes; `uuid5` IDs; skip-if-present; upsert |
 | `logging_setup.py` | `JsonlLogger` | Structured per-document JSONL events |
 | `pipeline.py` | `IngestionPipeline` · `IngestionResult` | Orchestration, per-document quarantine, resumability |
 | `visual_index.py` | `VisualIndexPlaceholder` | Dormant ColPali/Qwen-VL extension point (raises `NotImplementedError`) |
-| `cli.py` | `build_arg_parser()` · `main()` | argparse surface + pipeline wiring |
+| `cli.py` | `build_arg_parser()` · `main()` | argparse `ingest`/`search`/`eval` subcommands + pipeline/retriever/eval wiring |
 
 ## Repository structure
 
@@ -151,12 +184,15 @@ SportsScienceRAG/
 │   ├── parser.py                # DoclingParser
 │   ├── chunker.py               # SectionChunker
 │   ├── embedder.py              # TextEmbedder
+│   ├── retriever.py             # Retriever + RetrievedChunk (chunk-level search)
+│   ├── evaluator.py             # ranx graded IR evaluation
 │   ├── persistence.py           # RenderStore + TextStore
 │   ├── qdrant_store.py          # QdrantStore
 │   ├── logging_setup.py         # JsonlLogger
 │   ├── pipeline.py              # IngestionPipeline
 │   ├── visual_index.py          # ColPali/Qwen-VL seed (not built)
-│   └── cli.py                   # CLI + wiring
+│   └── cli.py                   # ingest/search/eval CLI + wiring
+├── eval/                        # gold.jsonl (graded queries) + rubric README
 ├── tests/                       # pytest suite (unit + `integration`-marked)
 ├── tools/bulk_download_papers.py# paper-acquisition helper (separate concern)
 ├── assets/                      # sample PDFs for local/integration testing
@@ -181,3 +217,4 @@ Generated from `pyproject.toml`:
 | `Pillow` | Page-render image encoding (PNG) |
 | `python-dotenv` | `.env` loading |
 | `pytest`, `pytest-cov` *(dev)* | Test suite + coverage |
+| `ranx` *(eval)* | Graded IR metrics (`mrr`, `recall@k`, `ndcg@10`) for the eval harness |
