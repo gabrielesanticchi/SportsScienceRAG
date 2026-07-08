@@ -1,6 +1,12 @@
 import json
 
-from sportsscience_rag.evaluator import GoldQuery, build_run_dict, load_gold
+from sportsscience_rag.evaluator import (
+    EvalReport,
+    GoldQuery,
+    build_run_dict,
+    evaluate_run,
+    load_gold,
+)
 from sportsscience_rag.retriever import RetrievedChunk
 
 
@@ -53,9 +59,6 @@ def test_load_gold_skips_blank_lines(tmp_path):
     )
     queries, qrels = load_gold(p)
     assert len(queries) == 1
-
-
-from sportsscience_rag.evaluator import EvalReport, evaluate_run
 
 
 def test_evaluate_run_computes_metrics_and_per_query():

@@ -22,7 +22,7 @@ from sportsscience_rag.parser import PARSER_VERSION, DoclingParser
 from sportsscience_rag.persistence import RenderStore, TextStore
 from sportsscience_rag.pipeline import IngestionPipeline
 from sportsscience_rag.qdrant_store import QdrantStore
-from sportsscience_rag.retriever import Retriever
+from sportsscience_rag.retriever import Retriever, RetrievedChunk
 from sportsscience_rag.s3_source import S3Source
 
 if TYPE_CHECKING:
@@ -169,7 +169,7 @@ def _make_retriever(config: IngestionConfig, collection: str) -> Retriever:
     return Retriever(qdrant_client, TextEmbedder(), collection)
 
 
-def _format_hit(hit) -> str:
+def _format_hit(hit: RetrievedChunk) -> str:
     """Renders a single ``RetrievedChunk`` as a one-line human-readable string.
 
     Args:
