@@ -1,7 +1,10 @@
 {
-  // Debug configs for the S3 -> Docling -> Qdrant ingestion pipeline.
+  // Debug configs for the SportsScience RAG CLI (ingest / search / eval).
   //
-  // How to step through the pipeline one stage at a time:
+  // The CLI uses subcommands: `python -m sportsscience_rag {ingest|search|eval} ...`.
+  // Every "args" array below therefore begins with its subcommand.
+  //
+  // How to step through the INGEST pipeline one stage at a time:
   //   1. Open src/sportsscience_rag/pipeline.py and set a breakpoint on the
   //      first line of IngestionPipeline._process_one (the `start = ...` line).
   //      Each stage is a labelled block: fetch -> hash -> skip-check -> parse
@@ -34,6 +37,7 @@
       "justMyCode": true,
       "envFile": "${workspaceFolder}/.env",
       "args": [
+        "ingest",
         "--prefix", "disalvo2007",
         "--collection", "debug-stepthrough"
       ]
@@ -49,6 +53,7 @@
       "justMyCode": false,
       "envFile": "${workspaceFolder}/.env",
       "args": [
+        "ingest",
         "--prefix", "disalvo2007",
         "--collection", "debug-stepthrough"
       ]
@@ -64,6 +69,7 @@
       "justMyCode": true,
       "envFile": "${workspaceFolder}/.env",
       "args": [
+        "ingest",
         "--dry-run",
         "--limit", "5",
         "--verbose"
@@ -80,7 +86,40 @@
       "justMyCode": true,
       "envFile": "${workspaceFolder}/.env",
       "args": [
+        "ingest",
         "--collection", "sport-science-documents"
+      ]
+    },
+    {
+      "name": "Search: one-shot query",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sportsscience_rag",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": true,
+      "envFile": "${workspaceFolder}/.env",
+      "args": [
+        "search",
+        "training load and injury risk",
+        "--limit", "5"
+      ]
+    },
+    {
+      "name": "Eval: score retriever against gold set",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "sportsscience_rag",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": true,
+      "envFile": "${workspaceFolder}/.env",
+      "args": [
+        "eval",
+        "--gold", "eval/gold.jsonl",
+        "--limit", "10"
       ]
     },
     {
